@@ -4,13 +4,15 @@ interface PostPageSnapshot<Loader> {
   isHydrating: boolean;
 }
 
+type ExpansionResult = "expanded" | "next-batch" | "skipped" | "withdrawn" | { timeout: Error };
+
 export interface PostPageAdapter<Loader extends object> {
   read(): PostPageSnapshot<Loader>;
   identify(loader: Loader): object;
   observeChanges(onChange: () => void): void;
   observeManualCollapses(onCollapse: (loader: Loader) => void): void;
   waitForHydration(): Promise<void>;
-  expand(loader: Loader): Promise<"expanded" | "next-batch" | "skipped" | "withdrawn">;
+  expand(loader: Loader): Promise<ExpansionResult>;
 }
 
 type ExpansionState = "idle" | "running" | "stopped" | "completed" | "error";
@@ -25,6 +27,8 @@ export interface ExpansionSnapshot {
 }
 
 const stepPauseMs = 150;
+const retryDelaysMs = [1000, 2000, 4000];
+const consecutiveFailureLimit = 3;
 
 export function createExpansionRun<Loader extends object>(
   postPage: PostPageAdapter<Loader>,
@@ -35,16 +39,24 @@ export function createExpansionRun<Loader extends object>(
   let state: ExpansionState = "idle";
   let expandedStepsCount = 0;
   let skippedCount = 0;
-  let handled = new WeakSet<object>();
+  const handled = new WeakSet<object>();
   const unclickable = new WeakSet<object>();
+  const failed = new Set<object>();
   let isWorking = false;
-  let failedStep = false;
+  let consecutiveFailures = 0;
+  let activeLoader: object | undefined;
+  let retry: { identity: object; attempts: number } | undefined;
 
   function read() {
     const page = postPage.read();
     const loaders = page.loaders.filter((loader) => {
       const identity = postPage.identify(loader);
-      return !handled.has(identity) && !unclickable.has(identity);
+      return (
+        identity !== activeLoader &&
+        !handled.has(identity) &&
+        !unclickable.has(identity) &&
+        !failed.has(identity)
+      );
     });
     return { ...page, loaders };
   }
@@ -74,12 +86,14 @@ export function createExpansionRun<Loader extends object>(
 
   async function start() {
     if (isRunning() || state === "completed") return;
-    if (state === "idle" || state === "error") {
+    if (state === "idle") {
       const page = read();
-      if (state === "idle" && page.loaders.length === 0 && !page.isHydrating) return;
-      handled = new WeakSet<object>();
-      expandedStepsCount = 0;
-      failedStep = false;
+      if (page.loaders.length === 0 && !page.isHydrating) return;
+    }
+    if (state === "error") {
+      failed.clear();
+      consecutiveFailures = 0;
+      retry = undefined;
     }
 
     state = "running";
@@ -90,35 +104,57 @@ export function createExpansionRun<Loader extends object>(
 
     try {
       while (isRunning()) {
-        await postPage.waitForHydration();
+        if (consecutiveFailures >= consecutiveFailureLimit) {
+          state = "error";
+          break;
+        }
+        const pending = retry;
+        // Only the loader whose attempt timed out may retry while its placeholders remain.
+        if (!pending) await postPage.waitForHydration();
         if (!isRunning()) break;
 
         const { isHydrating, loaders } = read();
-        if (isHydrating) continue;
-        const loader = loaders[0];
+        if (isHydrating && !pending) continue;
+        retry = undefined;
+        const loader = pending
+          ? loaders.find((candidate) => postPage.identify(candidate) === pending.identity)
+          : loaders[0];
+        // A late response or reader action can remove the loader during backoff.
+        if (!loader && pending) continue;
         if (!loader) {
-          state = failedStep ? "error" : "completed";
+          state = failed.size > 0 ? "error" : "completed";
           break;
         }
 
         const identity = postPage.identify(loader);
-        handled.add(identity);
-        const result = await postPage.expand(loader).catch((error: unknown) => {
-          reportFailure?.(error);
-          failedStep = true;
-          return "failed";
-        });
-        if (result === "failed") {
-          if (isRunning()) state = "error";
-          break;
-        }
-        if (result === "skipped") {
+        activeLoader = identity;
+        const result = await postPage.expand(loader);
+        activeLoader = undefined;
+        if (typeof result === "object") {
+          const attempts = (pending?.attempts ?? 0) + 1;
+          const delay = retryDelaysMs[attempts - 1];
+          if (
+            delay !== undefined &&
+            read().loaders.some((candidate) => postPage.identify(candidate) === identity)
+          ) {
+            retry = { identity, attempts };
+            await pause(delay);
+            continue;
+          }
+          failed.add(identity);
+          consecutiveFailures += 1;
+          reportFailure?.(result.timeout);
+          if (consecutiveFailures >= consecutiveFailureLimit) continue;
+        } else if (result === "skipped") {
           unclickable.add(identity);
           skippedCount += 1;
-        } else if (result !== "withdrawn") {
+        } else {
           // Pikabu reuses its batch button after successfully loading a page.
-          if (result === "next-batch") handled.delete(identity);
-          expandedStepsCount += 1;
+          if (result !== "next-batch") handled.add(identity);
+          if (result !== "withdrawn") {
+            consecutiveFailures = 0;
+            expandedStepsCount += 1;
+          }
         }
         publish();
         await pause(stepPauseMs);
@@ -127,6 +163,7 @@ export function createExpansionRun<Loader extends object>(
       reportFailure?.(error);
       if (isRunning()) state = "error";
     } finally {
+      activeLoader = undefined;
       isWorking = false;
       publish();
     }

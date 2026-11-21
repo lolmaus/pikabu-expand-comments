@@ -7,6 +7,7 @@ const actionLabels = {
   error: "Повторить",
   completed: "",
 };
+const branchPlural = new Intl.PluralRules("ru-RU");
 
 export function mountExpansionControl(
   menu: HTMLElement,
@@ -108,7 +109,10 @@ function statusText(snapshot: ExpansionSnapshot) {
       if (snapshot.initiallyEmpty) return "Все комментарии уже раскрыты.";
       if (snapshot.skippedCount === 1) return "Одну ветку не удалось раскрыть.";
       if (snapshot.skippedCount > 0) {
-        return `Не раскрыто веток: ${snapshot.skippedCount}.`;
+        const count = snapshot.skippedCount;
+        const category = branchPlural.select(count);
+        const noun = category === "one" ? "ветку" : category === "few" ? "ветки" : "веток";
+        return `Не удалось раскрыть ${count} ${noun}.`;
       }
       return "Все комментарии раскрыты.";
   }

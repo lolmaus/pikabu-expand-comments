@@ -170,6 +170,34 @@ test("skips a Reply Branch that opens without ever inserting replies", async () 
   }
 });
 
+test("a Reply Branch closed by a failed load times out and remains clickable", async () => {
+  vi.useFakeTimers();
+  try {
+    const container = loadFixture();
+    const branch = container.querySelector<HTMLElement>('[data-action="branch"]')!;
+    const children = branch.nextElementSibling as HTMLElement;
+    branch.addEventListener("click", (event) => {
+      event.preventDefault();
+      branch.classList.remove(collapseClass);
+      children.hidden = false;
+      setTimeout(() => {
+        branch.classList.add(collapseClass);
+        children.hidden = true;
+      }, 100);
+    });
+
+    const postPage = createPostPageAdapter(container);
+    const expanding = postPage.expand(branch);
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(await expanding).toEqual({
+      timeout: expect.objectContaining({ message: "Pikabu Reply Branch hydration timed out." }),
+    });
+    expect(postPage.read().loaders).toContain(branch);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 test("recognizes when a Comment Batch reveals existing top-level comments", async () => {
   vi.useFakeTimers();
   try {

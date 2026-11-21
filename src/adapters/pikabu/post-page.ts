@@ -47,6 +47,26 @@ export function createPostPageAdapter(initialContainer: HTMLElement): PostPageAd
     return () => observer.disconnect();
   }
 
+  function observeManualCollapses(onCollapse: (loader: HTMLElement) => void) {
+    function onClick(event: Event) {
+      // Capture the expanded state before Pikabu's click handler changes it.
+      if (!(event.target instanceof Element)) return;
+      const close = event.target.closest(collapseControl);
+      const loader =
+        event.target.closest(replyBranch) ?? close?.parentElement?.previousElementSibling;
+      if (
+        loader instanceof HTMLElement &&
+        loader.matches(replyBranch) &&
+        !loader.classList.contains(collapseClass) &&
+        currentContainer()?.contains(loader)
+      ) {
+        onCollapse(loader);
+      }
+    }
+    view.addEventListener("click", onClick, true);
+    return () => view.removeEventListener("click", onClick, true);
+  }
+
   function observeUntil(settled: () => boolean, click?: () => void) {
     return new Promise<boolean>((resolve) => {
       const disconnect = observeChanges(check);
@@ -78,6 +98,12 @@ export function createPostPageAdapter(initialContainer: HTMLElement): PostPageAd
     }
     let opened = false;
     let withdrawn = false;
+    let readerClosedBranch = false;
+    const stopObservingCollapses = observeManualCollapses((closedLoader) => {
+      if (closedLoader === loader || closedLoader.nextElementSibling?.contains(loader)) {
+        readerClosedBranch = true;
+      }
+    });
 
     const settled = await observeUntil(
       () => {
@@ -86,7 +112,7 @@ export function createPostPageAdapter(initialContainer: HTMLElement): PostPageAd
         withdrawn =
           !currentContainer()?.contains(loader) ||
           loader.parentElement?.closest("[hidden]") != null ||
-          (opened && collapsed);
+          (readerClosedBranch && collapsed);
         opened ||= !collapsed;
         if (!withdrawn) {
           replyContainer()
@@ -96,32 +122,34 @@ export function createPostPageAdapter(initialContainer: HTMLElement): PostPageAd
             });
         }
         if (isHydrating()) return false;
-        if (!withdrawn) return opened && hasHydratedReplies();
+        if (!withdrawn) return !collapsed && hasHydratedReplies();
         // Let any observed in-flight replies finish even if a reader hides them.
         return !Array.from(observedPlaceholders).some(
           (comment) => currentContainer()?.contains(comment) && comment.matches(placeholder),
         );
       },
       () => loader.click(),
-    );
+    ).finally(stopObservingCollapses);
 
     if (withdrawn && !isHydrating()) return "withdrawn";
     if (settled) return "expanded";
     if (!loader.classList.contains(collapseClass) && !isHydrating() && !hasHydratedReplies()) {
       return "skipped";
     }
-    throw new Error("Pikabu Reply Branch hydration timed out.", {
-      cause: {
-        commentId: loader.closest(".comment")?.getAttribute("data-id"),
-        opened,
-        withdrawn,
-        collapsed: loader.matches(collapsedReplyBranch),
-        connected: loader.isConnected,
-        hasReplyContainer: Boolean(replyContainer()),
-        hasHydratedReplies: hasHydratedReplies(),
-        isHydrating: isHydrating(),
-      },
-    });
+    return {
+      timeout: new Error("Pikabu Reply Branch hydration timed out.", {
+        cause: {
+          commentId: loader.closest(".comment")?.getAttribute("data-id"),
+          opened,
+          withdrawn,
+          collapsed: loader.matches(collapsedReplyBranch),
+          connected: loader.isConnected,
+          hasReplyContainer: Boolean(replyContainer()),
+          hasHydratedReplies: hasHydratedReplies(),
+          isHydrating: isHydrating(),
+        },
+      }),
+    };
   }
 
   async function expandCommentBatch(loader: HTMLElement) {
@@ -139,22 +167,25 @@ export function createPostPageAdapter(initialContainer: HTMLElement): PostPageAd
       () => loader.click(),
     );
     if (!settled) {
-      throw new Error("Pikabu Comment Batch hydration timed out.", {
-        cause: {
-          connected: loader.isConnected,
-          visibleCommentsBefore: previousComments.size,
-          visibleCommentsAfter: visibleElements(".comment").length,
-          previousBatchCount: previousBatchLabel,
-          remainingBatchCount: remainingBatchLabel(),
-          isHydrating: isHydrating(),
-        },
-      });
+      return {
+        timeout: new Error("Pikabu Comment Batch hydration timed out.", {
+          cause: {
+            connected: loader.isConnected,
+            visibleCommentsBefore: previousComments.size,
+            visibleCommentsAfter: visibleElements(".comment").length,
+            previousBatchCount: previousBatchLabel,
+            remainingBatchCount: remainingBatchLabel(),
+            isHydrating: isHydrating(),
+          },
+        }),
+      };
     }
     return loader.isConnected ? "next-batch" : "expanded";
   }
 
   return {
     observeChanges,
+    observeManualCollapses,
 
     identify(loader) {
       if (!loader.matches(replyBranch)) return loader;
@@ -168,28 +199,6 @@ export function createPostPageAdapter(initialContainer: HTMLElement): PostPageAd
       const identity = {};
       replyIdentities.set(id, identity);
       return identity;
-    },
-
-    observeManualCollapses(onCollapse) {
-      view.addEventListener(
-        "click",
-        (event) => {
-          // Capture the expanded state before Pikabu's click handler changes it.
-          if (!(event.target instanceof Element)) return;
-          const close = event.target.closest(collapseControl);
-          const loader =
-            event.target.closest(replyBranch) ?? close?.parentElement?.previousElementSibling;
-          if (
-            loader instanceof HTMLElement &&
-            loader.matches(replyBranch) &&
-            !loader.classList.contains(collapseClass) &&
-            currentContainer()?.contains(loader)
-          ) {
-            onCollapse(loader);
-          }
-        },
-        { capture: true },
-      );
     },
 
     read() {

@@ -375,12 +375,136 @@ test("reports which loader timed out when showing Retry", async ({ page }) => {
   });
 
   await page.getByRole("button", { name: "Раскрыть все комментарии" }).click();
-  await page.clock.fastForward(16_000);
+  await page.clock.runFor(67_500);
 
   await expect(status).toHaveText(
     "Не удалось загрузить часть комментариев. Можно попробовать ещё раз.",
   );
   expect((await warning).text()).toContain("Pikabu Comment Batch hydration timed out.");
+});
+
+test("retries a stalled AJAX request while its loader stays clickable", async ({ page }) => {
+  await page.clock.install();
+  await openPostPage(page, true);
+  const releaseStall = Promise.withResolvers<void>();
+  const requested: number[] = [];
+  await page.route("**/ajax/comments_actions.php", async (route) => {
+    const attempt = requested.length + 1;
+    requested.push(attempt);
+    if (attempt === 1) {
+      await releaseStall.promise;
+      await route.abort();
+      return;
+    }
+    await route.fulfill({ contentType: "text/plain", body: "Тестовый комментарий" });
+  });
+  await page.locator(".comments__container").evaluate((container) => {
+    const batch = document.createElement("button");
+    batch.className = "comment__more";
+    batch.textContent = "Загрузить ещё";
+    container.append(batch);
+    const comment = document.createElement("div");
+    comment.className = "comment comment_loading-hidden";
+    batch.addEventListener("click", async () => {
+      batch.before(comment);
+      try {
+        const response = await fetch("/ajax/comments_actions.php", { method: "POST" });
+        comment.textContent = await response.text();
+        comment.classList.remove("comment_loading-hidden");
+        batch.remove();
+      } catch {
+        // The failed request leaves the loader available.
+      }
+    });
+  });
+
+  try {
+    await page.getByRole("button", { name: "Раскрыть все комментарии" }).click();
+    await expect.poll(() => requested).toEqual([1]);
+    await page.clock.runFor(16_100);
+    await expect.poll(() => requested).toEqual([1, 2]);
+    await page.clock.runFor(200);
+    await expect(page.getByRole("status")).toHaveText("Все комментарии раскрыты.");
+  } finally {
+    releaseStall.resolve();
+  }
+});
+
+test("skips a silent drop, halts on three AJAX failures, and resumes via Retry", async ({
+  page,
+}) => {
+  const now = new Date("2026-01-01T00:00:00Z");
+  await page.clock.install({ time: now });
+  await openPostPage(page, true);
+  await page.clock.pauseAt(new Date(now.getTime() + 60_000));
+  let recovered = false;
+  const requested: string[] = [];
+  await page.route("**/ajax/comments_actions.php", async (route) => {
+    const id = route.request().postData()!;
+    requested.push(id);
+    await route.fulfill({ status: id === "drop" || recovered ? 204 : 429 });
+  });
+  const container = page.locator(".comments__container");
+  await container.evaluate((element) => {
+    const collapse = "comment-toggle-children_collapse";
+    for (const id of ["drop", "one", "two", "three", "later"]) {
+      const root = document.createElement("div");
+      root.className = "comment";
+      root.dataset["id"] = id;
+      root.innerHTML = `<button class="comment-toggle-children ${collapse}">${id}</button>
+        <div class="comment__children" hidden></div>`;
+      const control = root.querySelector("button")!;
+      const children = root.querySelector<HTMLElement>(".comment__children")!;
+      control.addEventListener("click", async () => {
+        control.classList.remove(collapse);
+        children.hidden = false;
+        const response = await fetch("/ajax/comments_actions.php", { method: "POST", body: id });
+        if (!response.ok) {
+          control.classList.add(collapse);
+          children.hidden = true;
+        } else if (id !== "drop") {
+          children.insertAdjacentHTML("beforeend", '<div class="comment">Ответ</div>');
+        }
+      });
+      element.append(root);
+    }
+  });
+
+  await page.getByRole("button", { name: "Раскрыть все комментарии" }).evaluate((button) => {
+    (button as HTMLButtonElement).click();
+  });
+  await expect.poll(() => requested).toEqual(["drop"]);
+  await page.clock.runFor(15_150);
+  for (const id of ["one", "two", "three"]) {
+    const loader = container.getByRole("button", { name: id, exact: true });
+    for (const [attempt, interval] of [16_000, 17_000, 19_000, 15_150].entries()) {
+      await expect.poll(() => requested.filter((step) => step === id).length).toBe(attempt + 1);
+      await expect(loader).toHaveClass(/comment-toggle-children_collapse/);
+      await page.clock.runFor(interval);
+    }
+  }
+  const status = page.getByRole("status");
+  await expect(status).toHaveText(
+    "Не удалось загрузить часть комментариев. Можно попробовать ещё раз.",
+  );
+  expect(requested).not.toContain("later");
+
+  recovered = true;
+  // Pikabu can replace a dropped branch control with a collapsed one for the same comment.
+  await container.getByRole("button", { name: "drop", exact: true }).evaluate((button) => {
+    const replacement = button.cloneNode(true) as Element;
+    replacement.classList.add("comment-toggle-children_collapse");
+    button.replaceWith(replacement);
+  });
+  const retry = page.getByRole("button", { name: "Повторить" });
+  await expect(retry).toBeVisible();
+  await retry.evaluate((button) => (button as HTMLButtonElement).click());
+  for (const id of ["one", "two", "three", "later"]) {
+    await expect(container.locator(`[data-id="${id}"] .comment__children`)).toHaveText("Ответ");
+    await page.clock.runFor(150);
+  }
+  await expect(status).toHaveText("Одну ветку не удалось раскрыть.");
+  expect(requested.slice(13)).toEqual(["one", "two", "three", "later"]);
 });
 
 test("continues after a batch hydrates replies under the same top-level comment", async ({

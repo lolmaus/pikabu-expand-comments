@@ -116,53 +116,84 @@ test("stops with a click in flight and continues without repeating handled loade
   expect(snapshots.at(-1)).toMatchObject({ state: "completed", remainingLoadersCount: 0 });
 });
 
-test("a fresh run retries earlier attempts while continuing to exclude unclickable loaders", async () => {
-  const unclickable = { id: "unclickable" };
-  const attempted = { id: "attempted" };
-  const stalled = { id: "stalled" };
-  const clicked: string[] = [];
-  let shouldFail = true;
-  const snapshots: ExpansionSnapshot[] = [];
-  const run = createExpansionRun(
-    {
-      read: () => ({
-        loadedCommentsCount: 2,
-        loaders: [unclickable, attempted, stalled],
-        isHydrating: false,
-      }),
-      identify: (loader) => loader,
-      observeChanges: () => {},
-      observeManualCollapses: () => {},
-      waitForHydration: async () => {},
-      async expand(loader) {
-        clicked.push(loader.id);
-        if (loader === unclickable) return "skipped";
-        if (loader === stalled && shouldFail) throw new Error("Timed out");
-        return "expanded";
+test("retries timed-out loaders with exponential backoff and halts after three failed steps", async () => {
+  vi.useFakeTimers();
+  try {
+    const snapshots: ExpansionSnapshot[] = [];
+    const clicks: { loader: string; time: number }[] = [];
+    const loaders = ["skipped", "expanded", "a", "b", "c", "d"].map((id) => ({ id }));
+    const pause = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+    const timeout = new Error("Timed out");
+    const reportFailure = vi.fn();
+    let recovered = false;
+    const startTime = Date.now();
+    const run = createExpansionRun(
+      {
+        read: () => ({ loadedCommentsCount: 2, loaders, isHydrating: false }),
+        identify: (loader) => loader,
+        observeChanges: () => {},
+        observeManualCollapses: () => {},
+        waitForHydration: async () => {},
+        async expand(loader) {
+          clicks.push({ loader: loader.id, time: Date.now() - startTime });
+          if (loader.id === "skipped") return "skipped";
+          if (!recovered && loader.id !== "expanded") {
+            await pause(15_000);
+            return { timeout };
+          }
+          return "expanded";
+        },
       },
-    },
-    async () => {},
-    (snapshot) => snapshots.push(snapshot),
-  );
+      pause,
+      (snapshot) => snapshots.push(snapshot),
+      reportFailure,
+    );
 
-  await run.start();
-  expect(snapshots.at(-1)).toMatchObject({ state: "error", skippedCount: 1 });
-  shouldFail = false;
-  await run.start();
-  expect(clicked).toEqual(["unclickable", "attempted", "stalled", "attempted", "stalled"]);
-  expect(snapshots.at(-1)).toMatchObject({
-    state: "completed",
-    remainingLoadersCount: 0,
-    skippedCount: 1,
-  });
+    const firstRun = run.start();
+    await vi.runAllTimersAsync();
+    await firstRun;
+    expect(clicks).toEqual([
+      { loader: "skipped", time: 0 },
+      { loader: "expanded", time: 150 },
+      { loader: "a", time: 300 },
+      { loader: "a", time: 16_300 },
+      { loader: "a", time: 33_300 },
+      { loader: "a", time: 52_300 },
+      { loader: "b", time: 67_450 },
+      { loader: "b", time: 83_450 },
+      { loader: "b", time: 100_450 },
+      { loader: "b", time: 119_450 },
+      { loader: "c", time: 134_600 },
+      { loader: "c", time: 150_600 },
+      { loader: "c", time: 167_600 },
+      { loader: "c", time: 186_600 },
+    ]);
+    expect(reportFailure).toHaveBeenCalledTimes(3);
+    expect(snapshots.at(-1)).toMatchObject({
+      state: "error",
+      expandedStepsCount: 1,
+      skippedCount: 1,
+    });
+
+    recovered = true;
+    const retry = run.start();
+    await vi.runAllTimersAsync();
+    await retry;
+    expect(clicks.slice(14).map(({ loader }) => loader)).toEqual(["a", "b", "c", "d"]);
+    expect(snapshots.at(-1)).toMatchObject({
+      state: "completed",
+      expandedStepsCount: 5,
+      remainingLoadersCount: 0,
+      skippedCount: 1,
+    });
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
-test("a failure after Stop remains retryable after Continue handles the remaining loaders", async () => {
-  const firstStep = Promise.withResolvers<void>();
-  const stalled = { id: "stalled" };
-  const remaining = { id: "remaining" };
-  const loaders = [stalled, remaining];
-  const clicked: string[] = [];
+test("continues past nonconsecutive failures and offers Retry for unfinished loaders", async () => {
+  const loaders = [true, true, false, true, false].map((fails, index) => ({ fails, index }));
+  const clicked: number[] = [];
   const snapshots: ExpansionSnapshot[] = [];
   const run = createExpansionRun(
     {
@@ -172,24 +203,56 @@ test("a failure after Stop remains retryable after Continue handles the remainin
       observeManualCollapses: () => {},
       waitForHydration: async () => {},
       async expand(loader) {
-        clicked.push(loader.id);
-        if (loader === stalled) await firstStep.promise;
-        return "expanded";
+        clicked.push(loader.index);
+        return loader.fails ? { timeout: new Error("Timed out") } : "expanded";
       },
     },
     async () => {},
     (snapshot) => snapshots.push(snapshot),
   );
 
+  await run.start();
+  expect(clicked).toEqual([0, 0, 0, 0, 1, 1, 1, 1, 2, 3, 3, 3, 3, 4]);
+  expect(snapshots.at(-1)).toMatchObject({ state: "error", expandedStepsCount: 2 });
+});
+
+test("Stop during backoff prevents clicking and Continue retries the same loader", async () => {
+  const backoff = Promise.withResolvers<void>();
+  const waiting = Promise.withResolvers<void>();
+  const loader = {};
+  const expand = vi
+    .fn<PostPageAdapter<object>["expand"]>()
+    .mockResolvedValueOnce({ timeout: new Error("Timed out") })
+    .mockResolvedValueOnce("expanded");
+  const snapshots: ExpansionSnapshot[] = [];
+  const run = createExpansionRun(
+    {
+      read: () => ({ loadedCommentsCount: 2, loaders: [loader], isHydrating: false }),
+      identify: (candidate) => candidate,
+      observeChanges: () => {},
+      observeManualCollapses: () => {},
+      waitForHydration: async () => {},
+      expand,
+    },
+    async (delay) => {
+      if (delay === 1000) {
+        waiting.resolve();
+        await backoff.promise;
+      }
+    },
+    (snapshot) => snapshots.push(snapshot),
+  );
+
   const finish = run.start();
-  await Promise.resolve();
+  await waiting.promise;
   run.stop();
-  firstStep.reject(new Error("Timed out"));
+  backoff.resolve();
   await finish;
+  expect(expand).toHaveBeenCalledOnce();
   expect(snapshots.at(-1)).toMatchObject({ state: "stopped" });
   await run.start();
-  expect(clicked).toEqual(["stalled", "remaining"]);
-  expect(snapshots.at(-1)).toMatchObject({ state: "error" });
+  expect(expand).toHaveBeenCalledTimes(2);
+  expect(snapshots.at(-1)).toMatchObject({ state: "completed" });
 });
 
 test("completes immediately when the Post Page has no pending comments", async () => {

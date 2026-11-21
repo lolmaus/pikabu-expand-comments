@@ -42,11 +42,47 @@ test("presents the Russian action and status inside the comments menu", () => {
   button.click();
   expect(start).toHaveBeenCalledTimes(2);
 
+  render({ ...metrics, state: "error" });
+  expect(status.textContent).toBe(
+    "Не удалось загрузить часть комментариев. Можно попробовать ещё раз.",
+  );
+  expect(button.textContent).toBe("Повторить");
+  expect(button.hidden).toBe(false);
+  button.click();
+  expect(start).toHaveBeenCalledTimes(3);
+
   render({ ...metrics, state: "completed" });
   expect(status.textContent).toBe("Все комментарии раскрыты.");
   expect(button.hidden).toBe(true);
   render({ ...metrics, state: "completed", initiallyEmpty: true });
   expect(status.textContent).toBe("Все комментарии уже раскрыты.");
+});
+
+test.each([
+  [1, "Одну ветку не удалось раскрыть."],
+  [2, "Не удалось раскрыть 2 ветки."],
+  [5, "Не удалось раскрыть 5 веток."],
+  [11, "Не удалось раскрыть 11 веток."],
+  [21, "Не удалось раскрыть 21 ветку."],
+  [24, "Не удалось раскрыть 24 ветки."],
+])("pluralizes the completion message for %i skipped Reply Branches", (skippedCount, text) => {
+  const menu = document.createElement("section");
+  const render = mountExpansionControl(
+    menu,
+    { start: vi.fn(), stop: vi.fn(), saveAutoExpandOnVisit: async () => true },
+    Promise.resolve(false),
+  );
+  render({
+    state: "completed",
+    loadedCommentsCount: 3,
+    expandedStepsCount: 0,
+    remainingLoadersCount: 0,
+    skippedCount,
+    initiallyEmpty: false,
+  });
+  expect(menu.firstElementChild?.shadowRoot?.querySelector('[role="status"]')?.textContent).toBe(
+    text,
+  );
 });
 
 test("discloses the saved preference and restores it if saving fails", async () => {
