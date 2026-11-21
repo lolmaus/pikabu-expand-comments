@@ -13,4 +13,6 @@ test("reads and writes Auto-Expand on Visit through asynchronous storage", async
   expect(await settings.getAutoExpandOnVisit()).toBe(false);
   await settings.setAutoExpandOnVisit(true);
   expect(await settings.getAutoExpandOnVisit()).toBe(true);
+  await settings.setAutoExpandOnVisit(false);
+  expect(await settings.getAutoExpandOnVisit()).toBe(false);
 });

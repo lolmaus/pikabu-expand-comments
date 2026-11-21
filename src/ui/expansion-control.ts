@@ -10,7 +10,12 @@ const actionLabels = {
 
 export function mountExpansionControl(
   menu: HTMLElement,
-  actions: { start: () => void; stop: () => void },
+  actions: {
+    start: () => void;
+    stop: () => void;
+    saveAutoExpandOnVisit: (enabled: boolean) => Promise<boolean>;
+  },
+  savedPreference: Promise<boolean>,
 ) {
   const document = menu.ownerDocument;
   const host = document.createElement("span");
@@ -20,6 +25,7 @@ export function mountExpansionControl(
     :host {
       display: inline-flex;
       align-items: center;
+      flex-wrap: wrap;
       gap: 0.5rem;
       margin-inline: 0.75rem;
       font: inherit;
@@ -42,10 +48,40 @@ export function mountExpansionControl(
   let onAction = actions.start;
   button.addEventListener("click", () => onAction());
 
+  const settings = document.createElement("button");
+  settings.type = "button";
+  settings.textContent = "Настройки";
+  settings.setAttribute("aria-expanded", "false");
+  settings.setAttribute("aria-controls", "expansion-settings");
+
+  const preference = document.createElement("label");
+  preference.id = "expansion-settings";
+  preference.hidden = true;
+
+  const checkbox = document.createElement("input");
+  checkbox.type = "checkbox";
+  checkbox.disabled = true;
+  preference.append(checkbox, " Раскрывать комментарии при открытии поста");
+  void savedPreference.then((enabled) => {
+    checkbox.checked = enabled;
+    checkbox.disabled = false;
+  });
+  checkbox.addEventListener("change", async () => {
+    const enabled = checkbox.checked;
+    checkbox.disabled = true;
+    if (!(await actions.saveAutoExpandOnVisit(enabled))) checkbox.checked = !enabled;
+    checkbox.disabled = false;
+  });
+
+  settings.addEventListener("click", () => {
+    preference.hidden = !preference.hidden;
+    settings.setAttribute("aria-expanded", String(!preference.hidden));
+  });
+
   const status = document.createElement("span");
   status.setAttribute("role", "status");
 
-  shadow.append(button, status);
+  shadow.append(button, settings, preference, status);
   menu.append(host);
 
   return (snapshot: ExpansionSnapshot) => {

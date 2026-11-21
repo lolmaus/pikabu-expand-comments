@@ -15,7 +15,7 @@ const userscript = readFileSync(
 const postUrl = "https://pikabu.ru/story/fixture_1";
 const fixtureScriptTag = '<script src="/fixture.js" defer></script>';
 
-async function openPostPage(page: Page, alreadyExpanded = false) {
+async function preparePostPage(page: Page, alreadyExpanded = false, extraBody = "") {
   await page.route("**/*", (route) => route.abort());
   await page.route("https://pikabu.ru/fixture.js", (route) =>
     route.fulfill({ path: fixtureScript, contentType: "text/javascript" }),
@@ -23,7 +23,9 @@ async function openPostPage(page: Page, alreadyExpanded = false) {
   await page.route(postUrl, (route) => {
     const post = alreadyExpanded
       ? expandedHtml
-      : html.replace("</head>", `${fixtureScriptTag}</head>`);
+      : html
+          .replace("</head>", `${fixtureScriptTag}</head>`)
+          .replace("</body>", `${extraBody}</body>`);
     return route.fulfill({ contentType: "text/html; charset=utf-8", body: post });
   });
   await page.addInitScript({
@@ -36,7 +38,21 @@ async function openPostPage(page: Page, alreadyExpanded = false) {
       ${userscript}
     })(new Proxy(window, {}));`,
   });
+}
+
+async function openPostPage(page: Page, alreadyExpanded = false) {
+  await preparePostPage(page, alreadyExpanded);
   await page.goto(postUrl);
+}
+
+async function openSettings(page: Page) {
+  await page.getByRole("button", { name: "Настройки" }).click();
+  return page.getByRole("checkbox", { name: "Раскрывать комментарии при открытии поста" });
+}
+
+function setVisibility(visibility: DocumentVisibilityState) {
+  Object.defineProperty(document, "visibilityState", { value: visibility, configurable: true });
+  document.dispatchEvent(new Event("visibilitychange"));
 }
 
 async function mockCommentLoads(page: Page, response: Promise<void>, heldAction = "branch") {
@@ -49,6 +65,106 @@ async function mockCommentLoads(page: Page, response: Promise<void>, heldAction 
   });
   return requests;
 }
+
+test("saves the preference for the next visit and keeps it enabled after Stop", async ({
+  page,
+}) => {
+  await openPostPage(page);
+  const checkbox = await openSettings(page);
+  const storedPreference = () => page.evaluate(() => localStorage.getItem("autoExpandOnVisit"));
+  const status = page.getByRole("status");
+  const start = page.getByRole("button", { name: "Раскрыть все комментарии" });
+  const stop = page.getByRole("button", { name: "Остановить" });
+
+  await expect(checkbox).not.toBeChecked();
+  await checkbox.check();
+  await expect.poll(storedPreference).toBe("true");
+  await expect(start).toBeVisible();
+
+  const releaseResponse = Promise.withResolvers<void>();
+  const requests = await mockCommentLoads(page, releaseResponse.promise);
+  try {
+    await page.reload();
+    await expect.poll(() => requests).toEqual(["branch"]);
+    await openSettings(page);
+    await expect(checkbox).toBeChecked();
+
+    await checkbox.uncheck();
+    await expect.poll(storedPreference).toBe("false");
+    await expect(stop).toBeVisible();
+
+    await checkbox.check();
+    await expect.poll(storedPreference).toBe("true");
+    await stop.click();
+    await expect(status).toHaveText(/Раскрытие остановлено/);
+    expect(await storedPreference()).toBe("true");
+  } finally {
+    releaseResponse.resolve();
+  }
+
+  await expect(status).toHaveText("Раскрытие остановлено. Сейчас видно 4.");
+  await page.reload();
+  await expect(status).toHaveText("Все комментарии раскрыты.");
+});
+
+test("waits for both a complete document and a present comments container", async ({ page }) => {
+  await preparePostPage(page, false, '<img src="/hold-load.svg" alt="">');
+  await page.addInitScript(() => localStorage.setItem("autoExpandOnVisit", "true"));
+  const releaseImage = Promise.withResolvers<void>();
+  await page.route("**/hold-load.svg", async (route) => {
+    await releaseImage.promise;
+    await route.fulfill({ status: 204 });
+  });
+  const requests = await mockCommentLoads(page, Promise.resolve());
+  const container = page.locator(".comments__container");
+  const start = page.getByRole("button", { name: "Раскрыть все комментарии" });
+  let detachedContainer;
+  try {
+    await page.goto(postUrl, { waitUntil: "domcontentloaded" });
+    await expect(await openSettings(page)).toBeChecked();
+    await expect(start).toBeVisible();
+    expect(await page.evaluate(() => document.readyState)).toBe("interactive");
+    expect(requests).toEqual([]);
+    detachedContainer = await container.evaluateHandle((element) => {
+      element.remove();
+      return element;
+    });
+  } finally {
+    releaseImage.resolve();
+  }
+
+  await page.waitForLoadState("load");
+  await expect(start).toBeVisible();
+  expect(requests).toEqual([]);
+  await detachedContainer.evaluate((element) =>
+    document.getElementById("comments")!.append(element),
+  );
+  await expect(page.getByRole("status")).toHaveText("Все комментарии раскрыты.");
+});
+
+test("defers auto-expansion while hidden and finishes once started", async ({ page }) => {
+  await preparePostPage(page);
+  await page.addInitScript(() => localStorage.setItem("autoExpandOnVisit", "true"));
+  await page.addInitScript(setVisibility, "hidden" as const);
+  const releaseResponse = Promise.withResolvers<void>();
+  const requests = await mockCommentLoads(page, releaseResponse.promise);
+
+  try {
+    await page.goto(postUrl);
+    await expect(await openSettings(page)).toBeChecked();
+    await expect(page.getByRole("button", { name: "Раскрыть все комментарии" })).toBeVisible();
+    expect(requests).toEqual([]);
+
+    await page.evaluate(setVisibility, "visible" as const);
+    await expect.poll(() => requests).toEqual(["branch"]);
+    await expect(page.getByRole("button", { name: "Остановить" })).toBeVisible();
+    await page.evaluate(setVisibility, "hidden" as const);
+  } finally {
+    releaseResponse.resolve();
+  }
+
+  await expect(page.getByRole("status")).toHaveText("Все комментарии раскрыты.");
+});
 
 test("expands all Reply Branch variants in order before repeated Comment Batches", async ({
   page,
