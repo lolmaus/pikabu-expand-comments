@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="ru">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Прототип управления комментариями</title>
+<!-- Throwaway prototype: compare controls at the comment header, in a floating panel,
+     and inline with a floating Stop shortcut. The discussion and loading are simulated. -->
+<style>
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; font: 14px/1.45 var(--font-sans, system-ui, sans-serif); color: var(--foreground, #202421); }
+  button, select { font: inherit; cursor: pointer; }
+  button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid #4279cf; outline-offset: 2px; }
+  .demo { display: grid; gap: 10px; }
+  .demo-tools, .switcher { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+  .demo-tools button, .demo-tools select, .switcher button {
+    padding: 4px 8px; border-radius: 5px; border: 1px solid var(--border, #a7aca8);
+    background: var(--secondary, #f3f4f3); color: var(--secondary-foreground, #202421);
+  }
+  .mock {
+    --paper: #fff; --page: #edf0eb; --ink: #252a26; --subtle: #5d665e;
+    --line: #d8dfd8; --action: #286133; --soft: #e6f1e6;
+    position: relative; border: 1px solid var(--border, #a7aca8); border-radius: 10px;
+    overflow: hidden; color: var(--ink); background: var(--page);
+  }
+  .mock.dark {
+    --paper: #222825; --page: #181d1a; --ink: #edf1ec; --subtle: #b6c1b7;
+    --line: #414a42; --action: #abdfac; --soft: #334b38;
+  }
+  .viewport { height: 430px; overflow: auto; scrollbar-gutter: stable; }
+  .page { max-width: 620px; margin: auto; padding: 16px 12px 108px; }
+  article, .discussion { background: var(--paper); padding: 14px; border: 1px solid var(--line); border-radius: 8px; }
+  article { margin-bottom: 12px; }
+  article h2 { font-size: 18px; margin: 0 0 4px; }
+  article p { margin: 0; }
+  .discussion h2 { font-size: 16px; margin: 0 0 6px; }
+  .tabs { display: flex; gap: 16px; color: var(--subtle); margin-bottom: 10px; font-size: 13px; }
+  .panel { display: grid; gap: 6px; border-top: 1px solid var(--line); padding: 8px 0 0; }
+  .actions { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; }
+  .mock button {
+    background: var(--soft); color: var(--action); border: 1px solid transparent;
+    border-radius: 5px; font-weight: 650; padding: 5px 9px;
+  }
+  .mock button.secondary { background: var(--paper); border-color: var(--line); color: var(--ink); }
+  .mock input { accent-color: var(--action); }
+  .status { color: var(--subtle); font-size: 13px; }
+  .comments { padding: 0; margin: 10px 0 0; list-style: none; }
+  .comments li { border-top: 1px solid var(--line); padding: 10px 0; }
+  .comments li:nth-child(even) { padding-left: 22px; }
+  .comments b { display: block; color: var(--subtle); font-size: 12px; }
+  .dock {
+    position: absolute; z-index: 1; right: 18px; bottom: 10px; max-width: calc(100% - 36px);
+    padding: 9px 10px; background: var(--paper); border: 1px solid var(--line);
+    border-radius: 7px; box-shadow: 0 4px 16px #0002;
+  }
+  .dock .panel { border: 0; padding: 0; }
+  .stop { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+  .switcher { justify-content: center; }
+  .variant { font-weight: 650; }
+</style>
+
+<main class="demo">
+  <div class="demo-tools">
+    <label>Сценарий
+      <select id="scenario">
+        <option value="manual">Ручной запуск</option>
+        <option value="automatic">Открыть пост с автораскрытием</option>
+        <option value="retry">Сбой загрузки</option>
+        <option value="partial">Пропущенная ветка</option>
+        <option value="empty">Всё уже раскрыто</option>
+      </select>
+    </label>
+    <button type="button" id="reset">Заново</button>
+    <button type="button" id="theme" aria-pressed="false">Тёмная тема</button>
+    <button type="button" id="scroll">К ответам ↓</button>
+  </div>
+  <div class="mock">
+    <div class="viewport" tabindex="0" aria-label="Демонстрация страницы поста">
+      <div class="page">
+        <article>
+          <h2>Как вы выбираете книги в дорогу?</h2>
+          <p>Завтра еду поездом и собираю рекомендации на вечер.</p>
+        </article>
+        <section class="discussion" aria-label="Комментарии">
+          <h2>Комментарии</h2>
+          <div class="tabs"><strong>Все комментарии</strong><span>Автора</span></div>
+          <div id="inline"></div>
+          <ul class="comments">
+            <li><b>Лена</b>Беру то, что давно стоит на полке.</li>
+            <li><b>Миша</b>А я наоборот. В поезде лучше всего перечитывать знакомое.</li>
+            <li><b>Ольга</b>Рассказы Чехова. Можно читать по одному за раз.</li>
+            <li><b>Сергей</b>Наушники и аудиокнига, особенно когда поезд ночной.</li>
+            <li><b>Ира</b>В прошлый раз взяла путеводитель по городу, куда ехала.</li>
+            <li><b>Нина</b>Если дорога длинная, беру сборник детективов.</li>
+            <li><b>Роман</b>Скачиваю пару книг заранее. Связь за городом часто пропадает.</li>
+          </ul>
+        </section>
+      </div>
+    </div>
+    <div class="dock" id="dock" hidden></div>
+  </div>
+  <div class="switcher" aria-label="Варианты размещения">
+    <button type="button" id="previous" aria-label="Предыдущий вариант">←</button>
+    <span class="variant" id="variant" aria-live="polite"></span>
+    <button type="button" id="next" aria-label="Следующий вариант">→</button>
+  </div>
+</main>
+<script>
+  const variants = [
+    ['A', 'Рядом с комментариями'],
+    ['B', 'Плавающая панель'],
+    ['C', 'Рядом с комментариями + плавающая остановка'],
+  ];
+  const variantKey = new URLSearchParams(location.search).get('variant');
+  let variant = Math.max(0, variants.findIndex(([key]) => key === variantKey));
+  if (!variantKey) variant = 2;
+
+  const scenarioSelect = document.querySelector('#scenario');
+  const viewport = document.querySelector('.viewport');
+  const dock = document.querySelector('#dock');
+  const inline = document.querySelector('#inline');
+  const variantLabel = document.querySelector('#variant');
+  const scrollButton = document.querySelector('#scroll');
+
+  const panel = document.createElement('div');
+  panel.className = 'panel';
+  panel.innerHTML = `
+    <div class="actions">
+      <button type="button" id="main-action"></button>
+      <button type="button" id="settings-button" class="secondary" aria-expanded="false" aria-controls="settings">Настройки</button>
+    </div>
+    <label id="settings" hidden><input type="checkbox" id="auto"> Раскрывать комментарии при открытии поста</label>
+    <div class="status" id="status" role="status" aria-atomic="true" hidden></div>`;
+  const action = panel.querySelector('#main-action');
+  const settingsButton = panel.querySelector('#settings-button');
+  const settings = panel.querySelector('#settings');
+  const auto = panel.querySelector('#auto');
+  const status = panel.querySelector('#status');
+
+  const shortcut = document.createElement('div');
+  shortcut.className = 'stop';
+  shortcut.innerHTML = '<span class="status">Раскрываем комментарии…</span><button type="button">Остановить</button>';
+  shortcut.querySelector('button').addEventListener('click', stop);
+
+  let state;
+  let timer;
+  let index;
+  let scenario;
+  let canFail;
+  const commentCounts = [24, 29, 32, 40, 46, 52, 56, 62, 77, 78, 79];
+  const slowMs = 750;
+
+  function refreshDock() {
+    const belowHeader = panelIsAboveViewport();
+    const showShortcut = variant === 2 && belowHeader && state === 'running';
+    shortcut.hidden = !showShortcut;
+    dock.hidden = variant !== 1 && !showShortcut;
+    scrollButton.textContent = belowHeader ? 'К началу ↑' : 'К ответам ↓';
+  }
+
+  function panelIsAboveViewport() {
+    return inline.getBoundingClientRect().bottom <= viewport.getBoundingClientRect().top;
+  }
+
+  function render() {
+    const count = commentCounts[index];
+    const messages = {
+      idle: '',
+      running: `Раскрываем комментарии… Сейчас видно ${count}.`,
+      stopped: `Раскрытие остановлено. Сейчас видно ${count}.`,
+      error: 'Не удалось загрузить часть комментариев. Можно попробовать ещё раз.',
+      completed: scenario === 'partial'
+        ? 'Одну ветку не удалось раскрыть.'
+        : scenario === 'empty' ? 'Все комментарии уже раскрыты.' : 'Все комментарии раскрыты.',
+    };
+    action.hidden = state === 'completed';
+    action.textContent = {
+      idle: 'Раскрыть все комментарии', running: 'Остановить',
+      stopped: 'Продолжить', error: 'Повторить', completed: '',
+    }[state];
+    const message = messages[state];
+    if (status.textContent !== message) status.textContent = message;
+    status.hidden = !message;
+    refreshDock();
+  }
+
+  function stop() {
+    clearInterval(timer);
+    const returnFocus = shortcut.contains(document.activeElement);
+    state = 'stopped';
+    render();
+    if (returnFocus) {
+      viewport.focus({ preventScroll: true });
+    }
+  }
+
+  function start() {
+    clearInterval(timer);
+    state = 'running';
+    render();
+    timer = setInterval(() => {
+      index += 1;
+      if (canFail && index === 3) {
+        state = 'error';
+        canFail = false;
+      } else if (index === commentCounts.length - 1) {
+        state = 'completed';
+      }
+      if (state !== 'running') clearInterval(timer);
+      render();
+    }, slowMs);
+  }
+
+  function visit() {
+    clearInterval(timer);
+    scenario = scenarioSelect.value;
+    canFail = scenario === 'retry';
+    if (scenario === 'automatic') auto.checked = true;
+    settings.hidden = true;
+    settingsButton.setAttribute('aria-expanded', 'false');
+    index = 0;
+    viewport.scrollTop = 0;
+    state = scenario === 'empty' ? 'completed' : 'idle';
+    if (auto.checked && state === 'idle') start();
+    else render();
+  }
+
+  function showVariant() {
+    const [key, label] = variants[variant];
+    variantLabel.textContent = `${key} · ${label}`;
+    if (variant === 1) {
+      dock.prepend(panel);
+    } else {
+      inline.append(panel);
+    }
+    dock.append(shortcut);
+    refreshDock();
+  }
+
+  function cycle(direction) {
+    variant = (variant + direction + variants.length) % variants.length;
+    const url = new URL(location.href);
+    url.searchParams.set('variant', variants[variant][0]);
+    try { history.replaceState(null, '', url); } catch {}
+    showVariant();
+  }
+
+  action.addEventListener('click', () => state === 'running' ? stop() : start());
+  settingsButton.addEventListener('click', () => {
+    settings.hidden = !settings.hidden;
+    settingsButton.setAttribute('aria-expanded', String(!settings.hidden));
+  });
+  scenarioSelect.addEventListener('change', () => {
+    auto.checked = scenarioSelect.value === 'automatic';
+    visit();
+  });
+  document.querySelector('#reset').addEventListener('click', visit);
+  document.querySelector('#theme').addEventListener('click', ({ currentTarget }) => {
+    const dark = document.querySelector('.mock').classList.toggle('dark');
+    currentTarget.setAttribute('aria-pressed', String(dark));
+    currentTarget.textContent = dark ? 'Светлая тема' : 'Тёмная тема';
+  });
+  scrollButton.addEventListener('click', () => {
+    const target = viewport.scrollHeight - viewport.clientHeight;
+    viewport.scrollTop = panelIsAboveViewport() ? 0 : target;
+  });
+  viewport.addEventListener('scroll', refreshDock);
+  window.addEventListener('resize', refreshDock);
+  document.querySelector('#previous').addEventListener('click', () => cycle(-1));
+  document.querySelector('#next').addEventListener('click', () => cycle(1));
+  document.addEventListener('keydown', (event) => {
+    if (event.target.closest('input, textarea, select, [contenteditable]')) return;
+    if (event.key === 'ArrowLeft') cycle(-1);
+    if (event.key === 'ArrowRight') cycle(1);
+  });
+
+  showVariant();
+  visit();
+</script>
