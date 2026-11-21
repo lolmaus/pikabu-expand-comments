@@ -7,11 +7,18 @@ function mount() {
   const container = document.querySelector<HTMLElement>(".comments__container");
   if (!menu || !container) return;
 
-  const render = mountExpansionControl(menu, () => void run.start());
+  const render = mountExpansionControl(menu, {
+    start: () => void run.start(),
+    stop: () => run.stop(),
+  });
   const run = createExpansionRun(
     createPostPageAdapter(container),
     (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
     render,
+    (error) => {
+      const details = error instanceof Error ? { message: error.message, state: error.cause } : {};
+      console.warn(`[Pikabu Expand Comments] ${JSON.stringify(details)}`);
+    },
   );
 }
 

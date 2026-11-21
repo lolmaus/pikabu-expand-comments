@@ -1,17 +1,19 @@
-export interface PostPageSnapshot {
+interface PostPageSnapshot<Loader> {
   loadedCommentsCount: number;
-  remainingLoadersCount: number;
+  loaders: readonly Loader[];
   isHydrating: boolean;
 }
 
-export interface PostPageAdapter {
-  read(): PostPageSnapshot;
-  observeChanges(onChange: () => void): () => void;
-  waitForHydration(onChange: () => void): Promise<void>;
-  expandNext(onChange: () => void): Promise<boolean>;
+export interface PostPageAdapter<Loader extends object> {
+  read(): PostPageSnapshot<Loader>;
+  identify(loader: Loader): object;
+  observeChanges(onChange: () => void): void;
+  observeManualCollapses(onCollapse: (loader: Loader) => void): void;
+  waitForHydration(): Promise<void>;
+  expand(loader: Loader): Promise<"expanded" | "next-batch" | "skipped" | "withdrawn">;
 }
 
-type ExpansionState = "idle" | "running" | "completed" | "error";
+type ExpansionState = "idle" | "running" | "stopped" | "completed" | "error";
 
 export interface ExpansionSnapshot {
   state: ExpansionState;
@@ -24,55 +26,118 @@ export interface ExpansionSnapshot {
 
 const stepPauseMs = 150;
 
-function hasPendingComments(page: PostPageSnapshot) {
-  return page.remainingLoadersCount > 0 || page.isHydrating;
-}
-
-export function createExpansionRun(
-  postPage: PostPageAdapter,
+export function createExpansionRun<Loader extends object>(
+  postPage: PostPageAdapter<Loader>,
   pause: (milliseconds: number) => Promise<void>,
   render: (snapshot: ExpansionSnapshot) => void,
+  reportFailure?: (error: unknown) => void,
 ) {
   let state: ExpansionState = "idle";
   let expandedStepsCount = 0;
-  const stopObserving = postPage.observeChanges(publish);
+  let skippedCount = 0;
+  let handled = new WeakSet<object>();
+  const unclickable = new WeakSet<object>();
+  let isWorking = false;
+  let failedStep = false;
 
-  function publish(page = postPage.read()) {
-    const initiallyEmpty = state === "idle" && !hasPendingComments(page);
+  function read() {
+    const page = postPage.read();
+    const loaders = page.loaders.filter((loader) => {
+      const identity = postPage.identify(loader);
+      return !handled.has(identity) && !unclickable.has(identity);
+    });
+    return { ...page, loaders };
+  }
+
+  function publish() {
+    const page = read();
+    const initiallyEmpty = state === "idle" && page.loaders.length === 0 && !page.isHydrating;
     render({
       state: initiallyEmpty ? "completed" : state,
       expandedStepsCount,
       initiallyEmpty,
       loadedCommentsCount: page.loadedCommentsCount,
-      remainingLoadersCount: page.remainingLoadersCount,
-      skippedCount: 0,
+      remainingLoadersCount: page.loaders.length,
+      skippedCount,
     });
   }
 
-  async function start() {
-    if (state !== "idle" || !hasPendingComments(postPage.read())) return;
-
-    stopObserving();
-    state = "running";
-    publish();
-    try {
-      while (true) {
-        await postPage.waitForHydration(publish);
-        if (!(await postPage.expandNext(publish))) break;
-
-        expandedStepsCount += 1;
-        const page = postPage.read();
-        publish(page);
-        if (!hasPendingComments(page)) break;
-        await pause(stepPauseMs);
-      }
-      state = "completed";
-    } catch {
-      state = "error";
-    }
+  function stop() {
+    if (state !== "running") return;
+    state = "stopped";
     publish();
   }
 
+  function isRunning() {
+    return state === "running";
+  }
+
+  async function start() {
+    if (isRunning() || state === "completed") return;
+    if (state === "idle" || state === "error") {
+      const page = read();
+      if (state === "idle" && page.loaders.length === 0 && !page.isHydrating) return;
+      handled = new WeakSet<object>();
+      expandedStepsCount = 0;
+      failedStep = false;
+    }
+
+    state = "running";
+    publish();
+    // Continue may arrive while the previous click is still hydrating.
+    if (isWorking) return;
+    isWorking = true;
+
+    try {
+      while (isRunning()) {
+        await postPage.waitForHydration();
+        if (!isRunning()) break;
+
+        const { isHydrating, loaders } = read();
+        if (isHydrating) continue;
+        const loader = loaders[0];
+        if (!loader) {
+          state = failedStep ? "error" : "completed";
+          break;
+        }
+
+        const identity = postPage.identify(loader);
+        handled.add(identity);
+        const result = await postPage.expand(loader).catch((error: unknown) => {
+          reportFailure?.(error);
+          failedStep = true;
+          return "failed";
+        });
+        if (result === "failed") {
+          if (isRunning()) state = "error";
+          break;
+        }
+        if (result === "skipped") {
+          unclickable.add(identity);
+          skippedCount += 1;
+        } else if (result !== "withdrawn") {
+          // Pikabu reuses its batch button after successfully loading a page.
+          if (result === "next-batch") handled.delete(identity);
+          expandedStepsCount += 1;
+        }
+        publish();
+        await pause(stepPauseMs);
+      }
+    } catch (error) {
+      reportFailure?.(error);
+      if (isRunning()) state = "error";
+    } finally {
+      isWorking = false;
+      publish();
+    }
+  }
+
+  postPage.observeChanges(publish);
+  postPage.observeManualCollapses((loader) => {
+    if (!isRunning()) return;
+    handled.add(postPage.identify(loader));
+    publish();
+  });
   publish();
-  return { start };
+  return { start, stop };
 }

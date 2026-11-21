@@ -3,6 +3,12 @@
   <head>
     <meta charset="utf-8" />
     <title>Тестовый пост</title>
+    <style>
+      .comment__collapsing-area {
+        width: 12px;
+        height: 12px;
+      }
+    </style>
   </head>
   <body>
     <section class="story-comments__menu section_header">
@@ -14,12 +20,51 @@
     <div class="story-comments__all" id="comments">
       <div class="comments__container">
         <div class="comment" id="comment_1" data-id="1" data-indent="0">
-          <div class="comment__body">Тестовый комментарий</div>
-          <a class="comment-toggle-children comment-toggle-children_collapse" href="?cid=1#comments"
-            >раскрыть ветку (1)</a
+          <div class="comment__body">
+            Тестовый комментарий
+            <button type="button" class="spoiler">Спойлер</button>
+            <span hidden>Текст спойлера</span>
+          </div>
+          <a
+            class="comment-toggle-children comment-toggle-children_collapse"
+            data-action="branch"
+            href="?cid=1#comments"
+            >раскрыть ветку (3)</a
           >
+          <div class="comment__children" hidden>
+            <div class="comment__collapsing-area"></div>
+          </div>
         </div>
-        <div class="comment__children" hidden></div>
+        <div class="comment" id="comment_2" data-id="2" data-indent="0" data-rating="-5">
+          <button type="button" class="comment__collapse">Показать комментарий</button>
+          <div class="comment__body" hidden>Свёрнутый комментарий</div>
+          <button
+            type="button"
+            class="comment-toggle-children comment-toggle-children_collapse comment-toggle-children_only-hidden"
+            data-action="only-hidden"
+          >
+            ещё комментарии
+          </button>
+          <div class="comment__children" hidden>
+            <div class="comment__collapsing-area"></div>
+          </div>
+        </div>
+        <div class="comment" id="comment_3" data-id="3" data-indent="0">
+          <div class="comment__body">Тестовый комментарий</div>
+          <button
+            type="button"
+            class="comment-toggle-children comment-toggle-children_collapse"
+            data-action="hydrated"
+          >
+            раскрыть загруженную ветку (1)
+          </button>
+          <div class="comment__children" hidden>
+            <div class="comment__collapsing-area"></div>
+            <div class="comment" data-indent="1">
+              <div class="comment__body">Загруженный ответ</div>
+            </div>
+          </div>
+        </div>
         <button class="comment__more" type="button">
           Раскрыть <span class="comments__more-count">2 комментария</span>
         </button>
