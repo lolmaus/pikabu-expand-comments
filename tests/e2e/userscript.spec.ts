@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { expect, test, type Page } from "@playwright/test";
+import { installUserscript } from "../support/install-userscript.ts";
 
 const html = readFileSync(new URL("../fixtures/post-page.html", import.meta.url), "utf8");
 const expandedHtml = readFileSync(
@@ -8,10 +9,6 @@ const expandedHtml = readFileSync(
   "utf8",
 );
 const fixtureScript = fileURLToPath(new URL("../fixtures/comment-loading.js", import.meta.url));
-const userscript = readFileSync(
-  new URL("../../dist/userscript/pikabu-expand-comments.user.js", import.meta.url),
-  "utf8",
-);
 const postUrl = "https://pikabu.ru/story/fixture_1";
 const fixtureScriptTag = '<script src="/fixture.js" defer></script>';
 
@@ -31,16 +28,7 @@ async function preparePostPage(page: Page, alreadyExpanded = false, extraBody = 
       return route.fulfill({ contentType: "text/html; charset=utf-8", body: post });
     },
   );
-  await page.addInitScript({
-    content: `globalThis.GM = {
-      getValue: async (key) => JSON.parse(localStorage.getItem(key)),
-      setValue: async (key, value) => localStorage.setItem(key, JSON.stringify(value)),
-    };
-    // Simulate a userscript manager that wraps window but leaves window.top unwrapped.
-    ((window) => {
-      ${userscript}
-    })(new Proxy(window, {}));`,
-  });
+  await installUserscript(page);
 }
 
 async function openPostPage(page: Page, alreadyExpanded = false) {

@@ -1,6 +1,6 @@
 {
   "name": "pikabu-expand-comments",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "private": true,
   "type": "module",
   "scripts": {
@@ -12,7 +12,8 @@
     "typecheck": "tsc --project tsconfig.node.json && tsc --project tsconfig.browser.json && tsc --project tsconfig.vitest.json && tsc --project tsconfig.playwright.json",
     "build": "node lib/build.mts",
     "test": "vitest run",
-    "test:e2e": "pnpm run build && playwright test"
+    "test:e2e": "pnpm run build && playwright test",
+    "test:live": "pnpm run build && playwright test --config playwright.live.config.mts"
   },
   "devDependencies": {
     "@commitlint/cli": "21.2.4",
