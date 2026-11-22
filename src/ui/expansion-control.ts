@@ -17,6 +17,7 @@ export function mountExpansionControl(
     saveAutoExpandOnVisit: (enabled: boolean) => Promise<boolean>;
   },
   savedPreference: Promise<boolean>,
+  signal?: AbortSignal,
 ) {
   const document = menu.ownerDocument;
   const host = document.createElement("span");
@@ -140,6 +141,14 @@ export function mountExpansionControl(
   let running = false;
   let viewportEvents: AbortController | undefined;
   const page = document.defaultView;
+  signal?.addEventListener(
+    "abort",
+    () => {
+      viewportEvents?.abort();
+      host.remove();
+    },
+    { once: true },
+  );
 
   function updateShortcut() {
     const { top, bottom } = host.getBoundingClientRect();

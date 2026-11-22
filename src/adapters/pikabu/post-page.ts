@@ -73,15 +73,26 @@ export function createPostPageAdapter(
     return () => view.removeEventListener("click", onClick, true);
   }
 
-  function observeUntil(settled: () => boolean, click?: () => void) {
-    return new Promise<boolean>((resolve) => {
+  function observeUntil(settled: () => boolean, signal?: AbortSignal, click?: () => void) {
+    signal?.throwIfAborted();
+    return new Promise<boolean>((resolve, reject) => {
       const disconnect = observeChanges(check);
       const timeout = setTimeout(() => finish(false), hydrationTimeoutMs);
 
-      function finish(didSettle: boolean) {
+      function cleanup() {
         disconnect();
         clearTimeout(timeout);
+        signal?.removeEventListener("abort", abort);
+      }
+
+      function finish(didSettle: boolean) {
+        cleanup();
         resolve(didSettle);
+      }
+
+      function abort() {
+        cleanup();
+        reject(signal?.reason);
       }
 
       function check() {
@@ -89,12 +100,14 @@ export function createPostPageAdapter(
         if (settled()) finish(true);
       }
 
+      signal?.addEventListener("abort", abort, { once: true });
       click?.();
+      if (signal?.aborted) return;
       check();
     });
   }
 
-  async function expandReplyBranch(loader: HTMLElement) {
+  async function expandReplyBranch(loader: HTMLElement, signal?: AbortSignal) {
     const observedPlaceholders = new Set<Element>();
     function replyContainer() {
       const children = loader.nextElementSibling;
@@ -135,6 +148,7 @@ export function createPostPageAdapter(
           (comment) => currentContainer()?.contains(comment) && comment.matches(placeholder),
         );
       },
+      signal,
       () => loader.click(),
     ).finally(stopObservingCollapses);
 
@@ -159,7 +173,7 @@ export function createPostPageAdapter(
     };
   }
 
-  async function expandCommentBatch(loader: HTMLElement) {
+  async function expandCommentBatch(loader: HTMLElement, signal?: AbortSignal) {
     // A batch can reveal replies below the existing root and reuse the same button.
     const remainingBatchLabel = () => loader.querySelector(".comments__more-count")?.textContent;
     const previousBatchLabel = remainingBatchLabel();
@@ -171,6 +185,7 @@ export function createPostPageAdapter(
         (!currentContainer()?.contains(loader) ||
           Number.parseInt(remainingBatchLabel() ?? "", 10) < previousCount ||
           visibleElements(".comment").some((comment) => !previousComments.has(comment))),
+      signal,
       () => loader.click(),
     );
     if (!settled) {
@@ -220,17 +235,18 @@ export function createPostPageAdapter(
       };
     },
 
-    async waitForHydration() {
-      if (isHydrating() && !(await observeUntil(() => !isHydrating()))) {
+    async waitForHydration(signal) {
+      if (isHydrating() && !(await observeUntil(() => !isHydrating(), signal))) {
         throw new Error("Pikabu comment hydration timed out.");
       }
     },
 
-    expand(loader) {
+    expand(loader, signal) {
+      signal?.throwIfAborted();
       scroll.capture();
       return loader.matches(collapsedReplyBranch)
-        ? expandReplyBranch(loader)
-        : expandCommentBatch(loader);
+        ? expandReplyBranch(loader, signal)
+        : expandCommentBatch(loader, signal);
     },
   };
 }

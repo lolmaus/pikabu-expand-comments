@@ -284,3 +284,47 @@ test("completes immediately when the Post Page has no pending comments", async (
     },
   ]);
 });
+
+test("disposal cancels an in-flight step and suppresses stale errors and progress", async () => {
+  const inFlight = Promise.withResolvers<{ timeout: Error }>();
+  const loader = {};
+  const clicked = vi.fn();
+  const render = vi.fn();
+  const reportFailure = vi.fn();
+  const disconnect = vi.fn();
+  const stopObservingCollapses = vi.fn();
+  const run = createExpansionRun(
+    {
+      read: () => ({ loadedCommentsCount: 1, loaders: [loader], isHydrating: false }),
+      identify: (loader) => loader,
+      observeChanges: () => disconnect,
+      observeManualCollapses: () => stopObservingCollapses,
+      waitForHydration: async () => {},
+      expand(next, signal) {
+        clicked(next, signal);
+        return inFlight.promise;
+      },
+    },
+    async () => {},
+    render,
+    reportFailure,
+  );
+
+  const finished = run.start();
+  await Promise.resolve();
+  expect(clicked).toHaveBeenCalledWith(loader, expect.any(AbortSignal));
+
+  run.dispose();
+  const signal: AbortSignal = clicked.mock.calls[0]![1];
+  expect(signal.aborted).toBe(true);
+  expect(disconnect).toHaveBeenCalledOnce();
+  expect(stopObservingCollapses).toHaveBeenCalledOnce();
+  render.mockClear();
+
+  inFlight.resolve({ timeout: new Error("late timeout") });
+  await finished;
+  await run.start();
+  expect(clicked).toHaveBeenCalledOnce();
+  expect(render).not.toHaveBeenCalled();
+  expect(reportFailure).not.toHaveBeenCalled();
+});

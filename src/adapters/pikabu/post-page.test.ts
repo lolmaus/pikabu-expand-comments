@@ -254,3 +254,14 @@ test("a decreasing Comment Batch count is progress even when replies stay hidden
   await expect(postPage.expand(batch)).resolves.toBe("next-batch");
   expect(postPage.read().loadedCommentsCount).toBe(initialCount);
 });
+
+test("aborts pending Reply Branch hydration without waiting for the timeout", async () => {
+  const container = loadFixture();
+  const postPage = createPostPageAdapter(container);
+  const loader = container.querySelector<HTMLElement>('[data-action="branch"]')!;
+  const signal = new AbortController();
+  const expansion = postPage.expand(loader, signal.signal);
+
+  signal.abort();
+  await expect(expansion).rejects.toMatchObject({ name: "AbortError" });
+});

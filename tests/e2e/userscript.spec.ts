@@ -697,3 +697,97 @@ test("shows a themed floating Stop at 360px and returns keyboard focus without s
   await expect(container).toHaveCSS("overflow-anchor", "auto");
   await finishScrollScenario(container);
 });
+
+test("abandons the old Expansion Run when the comment tab URL changes before its DOM", async ({
+  page,
+}) => {
+  await openPostPage(page);
+  const releaseResponse = Promise.withResolvers<void>();
+  const requests = await mockCommentLoads(page, releaseResponse.promise);
+  const container = page.locator(".comments__container");
+  const oldContainer = await container.elementHandle();
+  const start = page.getByRole("button", { name: "Раскрыть все комментарии" });
+  const status = page.getByRole("status");
+
+  try {
+    await start.click();
+    await expect.poll(() => requests).toEqual(["branch"]);
+    await expect(container).toHaveCSS("overflow-anchor", "none");
+
+    const authorTab = page.getByRole("link", { name: "Автора" });
+    await authorTab.evaluate((tab) => {
+      tab.addEventListener("click", (event) => {
+        event.preventDefault();
+        history.pushState(null, "", location.pathname + "/author#comments");
+      });
+    });
+    await authorTab.click();
+    await expect(page).toHaveURL(postUrl + "/author#comments");
+    await expect(container).toHaveCSS("overflow-anchor", "auto");
+    await expect(page.getByRole("button", { name: "Остановить" })).toHaveCount(0);
+
+    await container.evaluate((element) => {
+      const menu = document.querySelector(".story-comments__menu")!;
+      const replacement = menu.cloneNode(true) as HTMLElement;
+      replacement.querySelector(".menu__item_current")!.classList.remove("menu__item_current");
+      replacement.querySelector('[href="#author"]')!.classList.add("menu__item_current");
+      menu.replaceWith(replacement);
+      element.outerHTML = '<div class="comments__container"><div class="comment">Автор</div></div>';
+    });
+    await expect(status).toHaveText("Все комментарии уже раскрыты.");
+    await expect(status).toHaveCount(1);
+    await expect(start).toHaveCount(0);
+  } finally {
+    releaseResponse.resolve();
+  }
+
+  await expect
+    .poll(() =>
+      oldContainer!.evaluate(
+        (element) => element.querySelector(".comment_loading-hidden") === null,
+      ),
+    )
+    .toBe(true);
+  await expect(status).toHaveText("Все комментарии уже раскрыты.");
+  expect(requests).toEqual(["branch"]);
+});
+
+test("rechecks Auto-Expand on Visit for the new comment tab and waits until visible", async ({
+  page,
+}) => {
+  await openPostPage(page, true);
+  const checkbox = await openSettings(page);
+  await checkbox.check();
+  const storedPreference = () => page.evaluate(() => localStorage.getItem("autoExpandOnVisit"));
+  await expect.poll(storedPreference).toBe("true");
+  await expect(page.getByRole("status")).toHaveText("Все комментарии уже раскрыты.");
+
+  await page.evaluate(setVisibility, "hidden" as const);
+  const authorTab = page.getByRole("link", { name: "Автора" });
+  await authorTab.evaluate((tab) => {
+    tab.addEventListener("click", (event) => {
+      event.preventDefault();
+      tab
+        .parentElement!.querySelector(".menu__item_current")!
+        .classList.remove("menu__item_current");
+      tab.classList.add("menu__item_current");
+      const container = document.querySelector(".comments__container")!;
+      container.innerHTML = '<button class="comment__more">Загрузить ещё</button>';
+      const loader = container.querySelector(".comment__more")!;
+      loader.addEventListener("click", () => {
+        loader.insertAdjacentHTML("beforebegin", '<div class="comment">Автор</div>');
+        loader.remove();
+      });
+    });
+  });
+  await authorTab.click();
+  await expect(page.getByRole("button", { name: "Раскрыть все комментарии" })).toBeVisible();
+  await expect(page.locator(".comment__more")).toBeVisible();
+
+  await page.evaluate(setVisibility, "visible" as const);
+  const status = page.getByRole("status");
+  await expect(status).toHaveText("Все комментарии раскрыты.");
+  await expect(status).toHaveCount(1);
+  await expect(await openSettings(page)).toBeChecked();
+  expect(await storedPreference()).toBe("true");
+});

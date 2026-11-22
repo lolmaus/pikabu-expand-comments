@@ -9,10 +9,10 @@ type ExpansionResult = "expanded" | "next-batch" | "skipped" | "withdrawn" | { t
 export interface PostPageAdapter<Loader extends object> {
   read(): PostPageSnapshot<Loader>;
   identify(loader: Loader): object;
-  observeChanges(onChange: () => void): void;
-  observeManualCollapses(onCollapse: (loader: Loader) => void): void;
-  waitForHydration(): Promise<void>;
-  expand(loader: Loader): Promise<ExpansionResult>;
+  observeChanges(onChange: () => void): (() => void) | void;
+  observeManualCollapses(onCollapse: (loader: Loader) => void): (() => void) | void;
+  waitForHydration(signal?: AbortSignal): Promise<void>;
+  expand(loader: Loader, signal?: AbortSignal): Promise<ExpansionResult>;
 }
 
 type ExpansionState = "idle" | "running" | "stopped" | "completed" | "error";
@@ -36,6 +36,8 @@ export function createExpansionRun<Loader extends object>(
   render: (snapshot: ExpansionSnapshot) => void,
   reportFailure?: (error: unknown) => void,
 ) {
+  const lifetime = new AbortController();
+  const signal = lifetime.signal;
   let state: ExpansionState = "idle";
   let expandedStepsCount = 0;
   let skippedCount = 0;
@@ -62,6 +64,7 @@ export function createExpansionRun<Loader extends object>(
   }
 
   function publish() {
+    if (signal.aborted) return;
     const page = read();
     const initiallyEmpty = state === "idle" && page.loaders.length === 0 && !page.isHydrating;
     render({
@@ -81,11 +84,11 @@ export function createExpansionRun<Loader extends object>(
   }
 
   function isRunning() {
-    return state === "running";
+    return !signal.aborted && state === "running";
   }
 
   async function start() {
-    if (isRunning() || state === "completed") return;
+    if (signal.aborted || isRunning() || state === "completed") return;
     if (state === "idle") {
       const page = read();
       if (page.loaders.length === 0 && !page.isHydrating) return;
@@ -110,7 +113,7 @@ export function createExpansionRun<Loader extends object>(
         }
         const pending = retry;
         // Only the loader whose attempt timed out may retry while its placeholders remain.
-        if (!pending) await postPage.waitForHydration();
+        if (!pending) await postPage.waitForHydration(signal);
         if (!isRunning()) break;
 
         const { isHydrating, loaders } = read();
@@ -128,7 +131,8 @@ export function createExpansionRun<Loader extends object>(
 
         const identity = postPage.identify(loader);
         activeLoader = identity;
-        const result = await postPage.expand(loader);
+        const result = await postPage.expand(loader, signal);
+        if (signal.aborted) return;
         activeLoader = undefined;
         if (typeof result === "object") {
           const attempts = (pending?.attempts ?? 0) + 1;
@@ -160,7 +164,7 @@ export function createExpansionRun<Loader extends object>(
         await pause(stepPauseMs);
       }
     } catch (error) {
-      reportFailure?.(error);
+      if (!signal.aborted) reportFailure?.(error);
       if (isRunning()) state = "error";
     } finally {
       activeLoader = undefined;
@@ -169,12 +173,20 @@ export function createExpansionRun<Loader extends object>(
     }
   }
 
-  postPage.observeChanges(publish);
-  postPage.observeManualCollapses((loader) => {
+  const disconnect = postPage.observeChanges(publish);
+  const stopObservingCollapses = postPage.observeManualCollapses((loader) => {
     if (!isRunning()) return;
     handled.add(postPage.identify(loader));
     publish();
   });
   publish();
-  return { start, stop };
+  return {
+    start,
+    stop,
+    dispose() {
+      lifetime.abort();
+      disconnect?.();
+      stopObservingCollapses?.();
+    },
+  };
 }
