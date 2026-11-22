@@ -5,11 +5,13 @@ import manifest from "../package.json" with { type: "json" };
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const name = manifest.name;
+const buildTimestamp = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
 const release = `https://github.com/lolmaus/${name}/releases/latest/download`;
 const directives = [
   ["name", "Pikabu Expand Comments"],
   ["namespace", `https://github.com/lolmaus/${name}`],
   ["version", manifest.version],
+  ["build", buildTimestamp],
   ["match", "https://pikabu.ru/story/*"],
   ["noframes", ""],
   ["run-at", "document-end"],

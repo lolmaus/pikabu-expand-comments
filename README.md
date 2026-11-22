@@ -22,7 +22,7 @@ Use the Node version from `.nvmrc` and the pnpm version specified in `package.js
 
 - Run `pnpm test` for unit and DOM tests and `pnpm run test:e2e` for offline browser tests.
 - Run `pnpm run test:live` for the opt-in Chromium smoke test against Pikabu. It allows up to eight loader clicks on the sample post and is separate from the offline suites.
-- Push a stable tag matching the version in `package.json`, such as `v0.1.8`. The release workflow builds and attaches both the `.user.js` and `.meta.js` files to the GitHub Release.
+- Releasable Conventional Commits pushed to `main` automatically open or update the rolling Release Please pull request with the proposed version bump and `CHANGELOG.md` entry. Review or edit the changelog on that PR if needed, then merge it. The release workflow creates the matching `v*` tag and draft GitHub Release, builds and attaches both `.user.js` and `.meta.js`, and publishes the release once the uploads succeed.
 
 ### Violentmonkey release acceptance
 

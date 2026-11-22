@@ -1,41 +1,55 @@
-name: Publish userscript
+name: Release
 
 on:
   push:
-    tags:
-      - "v*"
+    branches:
+      - main
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
-  release:
+  release-please:
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - id: release
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        with:
+          token: ${{ github.token }}
+
+  publish-assets:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
           package-manager-cache: false
-      - name: Verify release tag
-        run: |
-          version="$(node -p 'require("./package.json").version')"
-          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ || "$GITHUB_REF_NAME" != "v$version" ]]; then
-            echo "Expected a stable tag matching package.json (v$version), got $GITHUB_REF_NAME" >&2
-            exit 1
-          fi
-      - name: Build release assets
+      - name: Build userscript assets
         run: |
           pnpm_version="$(node -p 'require("./package.json").devEngines.packageManager.version')"
           npm install --global "pnpm@$pnpm_version"
           pnpm install --frozen-lockfile
           pnpm run build
-      - name: Publish GitHub Release
+      - name: Verify release assets
+        run: |
+          test -s dist/userscript/pikabu-expand-comments.user.js
+          test -s dist/userscript/pikabu-expand-comments.meta.js
+      - name: Upload assets and publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ needs.release-please.outputs.tag_name }}
         run: |
-          gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes \
+          gh release upload "$TAG_NAME" --clobber \
             dist/userscript/pikabu-expand-comments.user.js \
             dist/userscript/pikabu-expand-comments.meta.js
+          gh release edit "$TAG_NAME" --draft=false --latest
