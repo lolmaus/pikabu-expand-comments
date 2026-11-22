@@ -10,6 +10,26 @@ function loadFixture() {
   return document.querySelector<HTMLElement>(".comments__container")!;
 }
 
+test("suppresses native scroll anchoring only on the current container during a run", () => {
+  const container = loadFixture();
+  container.style.setProperty("overflow-anchor", "auto", "important");
+  const postPage = createPostPageAdapter(container);
+
+  postPage.setRunning(true);
+  expect(container.style.getPropertyValue("overflow-anchor")).toBe("none");
+
+  const replacement = document.createElement("div");
+  replacement.className = "comments__container";
+  container.replaceWith(replacement);
+  postPage.setRunning(true);
+  expect(container.style.getPropertyValue("overflow-anchor")).toBe("auto");
+  expect(container.style.getPropertyPriority("overflow-anchor")).toBe("important");
+  expect(replacement.style.getPropertyValue("overflow-anchor")).toBe("none");
+
+  postPage.setRunning(false);
+  expect(replacement.style.getPropertyValue("overflow-anchor")).toBe("");
+});
+
 test("waits for hydration and prioritizes visible Reply Branches over Comment Batches", async () => {
   const container = loadFixture();
   const branch = container.querySelector<HTMLElement>('[data-action="branch"]')!;

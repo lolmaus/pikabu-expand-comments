@@ -58,6 +58,41 @@ test("presents the Russian action and status inside the comments menu", () => {
   expect(status.textContent).toBe("Все комментарии уже раскрыты.");
 });
 
+test("the offscreen shortcut stops the run and returns focus to Continue", () => {
+  document.body.innerHTML = "<section></section>";
+  const menu = document.querySelector("section")!;
+  const snapshot = {
+    loadedCommentsCount: 3,
+    expandedStepsCount: 0,
+    remainingLoadersCount: 1,
+    skippedCount: 0,
+    initiallyEmpty: false,
+  };
+  const render = mountExpansionControl(
+    menu,
+    {
+      start: vi.fn(),
+      stop: () => render({ ...snapshot, state: "stopped" }),
+      saveAutoExpandOnVisit: async () => true,
+    },
+    Promise.resolve(false),
+  );
+  const host = menu.firstElementChild!;
+  vi.spyOn(host, "getBoundingClientRect").mockReturnValue(new DOMRect(0, -100, 200, 50));
+  const shadow = host.shadowRoot!;
+  render({ ...snapshot, state: "running" });
+  const visibleStopButtons = Array.from(shadow.querySelectorAll("button")).filter(
+    (button) => button.textContent === "Остановить" && !button.hidden,
+  );
+  expect(visibleStopButtons).toHaveLength(2);
+  const [inlineStop, shortcut] = visibleStopButtons;
+  shortcut!.focus();
+  shortcut!.click();
+  expect(shortcut!.hidden).toBe(true);
+  expect(shadow.activeElement).toBe(inlineStop);
+  expect(inlineStop!.textContent).toBe("Продолжить");
+});
+
 test.each([
   [1, "Одну ветку не удалось раскрыть."],
   [2, "Не удалось раскрыть 2 ветки."],

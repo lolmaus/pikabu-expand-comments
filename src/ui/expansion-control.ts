@@ -28,18 +28,61 @@ export function mountExpansionControl(
       align-items: center;
       flex-wrap: wrap;
       gap: 0.5rem;
-      margin-inline: 0.75rem;
+      min-inline-size: 0;
+      max-inline-size: calc(100% - 0.5rem);
+      margin-inline-start: 0.5rem;
       font: inherit;
-      color: var(--color-text, inherit);
+      white-space: normal;
+      overflow-wrap: anywhere;
+      color: var(--color-black-940, #1b1e24);
     }
     button {
-      padding: 0.25em 0.6em;
-      border: 1px solid currentColor;
-      border-radius: 0.25em;
-      background: transparent;
+      box-sizing: border-box;
+      min-inline-size: 0;
+      max-inline-size: 100%;
+      padding: 0.375em 0.65em;
+      border: 1px solid var(--color-black-400, #e9e9e9);
+      border-radius: 0.375em;
+      background: var(--color-black-300, #f7f8fc);
       color: inherit;
       cursor: pointer;
       font: inherit;
+      white-space: normal;
+    }
+    button:focus-visible {
+      outline: 2px solid var(--color-primary-900, #65ab3c);
+      outline-offset: 2px;
+    }
+    label {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.375rem;
+      cursor: pointer;
+    }
+    input {
+      accent-color: var(--color-primary-900, #65ab3c);
+    }
+    [role="status"] {
+      color: var(--color-black-800, #444850);
+    }
+    .floating-stop {
+      position: fixed;
+      z-index: 1000;
+      inset-inline-end: max(0.75rem, env(safe-area-inset-right));
+      inset-block-end: max(0.75rem, env(safe-area-inset-bottom));
+      max-inline-size: calc(100vw - 1.5rem);
+      box-shadow: 0 2px 8px var(--color-black-alpha-16, rgb(0 0 0 / 0.16));
+    }
+    @media (pointer: coarse), (max-width: 480px) {
+      button, label {
+        min-block-size: 44px;
+      }
+    }
+    [role="status"]:empty {
+      position: absolute;
+    }
+    [hidden] {
+      display: none;
     }
   `);
   shadow.adoptedStyleSheets = [stylesheet];
@@ -62,7 +105,9 @@ export function mountExpansionControl(
   const checkbox = document.createElement("input");
   checkbox.type = "checkbox";
   checkbox.disabled = true;
-  preference.append(checkbox, " Раскрывать комментарии при открытии поста");
+  const preferenceText = document.createElement("span");
+  preferenceText.textContent = "Раскрывать комментарии при открытии поста";
+  preference.append(checkbox, preferenceText);
   void savedPreference.then((enabled) => {
     checkbox.checked = enabled;
     checkbox.disabled = false;
@@ -82,16 +127,49 @@ export function mountExpansionControl(
   const status = document.createElement("span");
   status.setAttribute("role", "status");
 
-  shadow.append(button, settings, preference, status);
+  const floatingStop = document.createElement("button");
+  floatingStop.type = "button";
+  floatingStop.className = "floating-stop";
+  floatingStop.textContent = actionLabels.running;
+  floatingStop.hidden = true;
+  floatingStop.addEventListener("click", actions.stop);
+
+  shadow.append(button, settings, preference, status, floatingStop);
   menu.append(host);
 
+  let running = false;
+  let viewportEvents: AbortController | undefined;
+  const page = document.defaultView;
+
+  function updateShortcut() {
+    const { top, bottom } = host.getBoundingClientRect();
+    const show = running && top < bottom && bottom <= 0;
+    if (show === !floatingStop.hidden) return;
+    const returnFocus = !show && shadow.activeElement === floatingStop;
+    floatingStop.hidden = !show;
+    if (returnFocus) (button.hidden ? settings : button).focus({ preventScroll: true });
+  }
+
   return (snapshot: ExpansionSnapshot) => {
+    const nextRunning = snapshot.state === "running";
+    if (running !== nextRunning) {
+      running = nextRunning;
+      if (running && page) {
+        viewportEvents = new AbortController();
+        const options = { passive: true, signal: viewportEvents.signal };
+        page.addEventListener("scroll", updateShortcut, options);
+        page.addEventListener("resize", updateShortcut, options);
+      } else {
+        viewportEvents?.abort();
+      }
+    }
     button.hidden = snapshot.state === "completed";
-    onAction = snapshot.state === "running" ? actions.stop : actions.start;
+    onAction = running ? actions.stop : actions.start;
     const label = actionLabels[snapshot.state];
     if (button.textContent !== label) button.textContent = label;
     const text = statusText(snapshot);
     if (status.textContent !== text) status.textContent = text;
+    updateShortcut();
   };
 }
 

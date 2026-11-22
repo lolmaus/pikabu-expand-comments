@@ -1,4 +1,5 @@
 import type { PostPageAdapter } from "../../core/expansion-run.ts";
+import { createScrollPreservation } from "./scroll-preservation.ts";
 
 const replyBranch = ".comment-toggle-children";
 const collapseClass = "comment-toggle-children_collapse";
@@ -10,7 +11,9 @@ const placeholder =
 const hidden = `[hidden], ${placeholder}`;
 const hydrationTimeoutMs = 15_000;
 
-export function createPostPageAdapter(initialContainer: HTMLElement): PostPageAdapter<HTMLElement> {
+export function createPostPageAdapter(
+  initialContainer: HTMLElement,
+): PostPageAdapter<HTMLElement> & { setRunning(running: boolean): void } {
   // Pikabu can replace the comment list while keeping the surrounding view.
   const view =
     initialContainer.closest(".story-comments__all") ??
@@ -19,8 +22,11 @@ export function createPostPageAdapter(initialContainer: HTMLElement): PostPageAd
   const replyIdentities = new Map<string, object>();
 
   function currentContainer() {
-    return view === initialContainer ? view : view.querySelector(".comments__container");
+    return view === initialContainer
+      ? initialContainer
+      : view.querySelector<HTMLElement>(".comments__container");
   }
+  const scroll = createScrollPreservation(initialContainer.ownerDocument, currentContainer);
 
   function visibleElements(selector: string) {
     return Array.from(currentContainer()?.querySelectorAll<HTMLElement>(selector) ?? []).filter(
@@ -79,6 +85,7 @@ export function createPostPageAdapter(initialContainer: HTMLElement): PostPageAd
       }
 
       function check() {
+        if (click) scroll.compensate();
         if (settled()) finish(true);
       }
 
@@ -184,6 +191,7 @@ export function createPostPageAdapter(initialContainer: HTMLElement): PostPageAd
   }
 
   return {
+    setRunning: scroll.setRunning,
     observeChanges,
     observeManualCollapses,
 
@@ -219,6 +227,7 @@ export function createPostPageAdapter(initialContainer: HTMLElement): PostPageAd
     },
 
     expand(loader) {
+      scroll.capture();
       return loader.matches(collapsedReplyBranch)
         ? expandReplyBranch(loader)
         : expandCommentBatch(loader);

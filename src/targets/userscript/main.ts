@@ -41,10 +41,14 @@ function mount(): boolean {
     },
     savedPreference,
   );
+  const postPage = createPostPageAdapter(container);
   const run = createExpansionRun(
-    createPostPageAdapter(container),
+    postPage,
     (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
-    render,
+    (snapshot) => {
+      postPage.setRunning(snapshot.state === "running");
+      render(snapshot);
+    },
     (error) => {
       const details = error instanceof Error ? { message: error.message, state: error.cause } : {};
       console.warn(`[Pikabu Expand Comments] ${JSON.stringify(details)}`);

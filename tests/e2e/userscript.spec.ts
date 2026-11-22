@@ -20,14 +20,17 @@ async function preparePostPage(page: Page, alreadyExpanded = false, extraBody = 
   await page.route("https://pikabu.ru/fixture.js", (route) =>
     route.fulfill({ path: fixtureScript, contentType: "text/javascript" }),
   );
-  await page.route(postUrl, (route) => {
-    const post = alreadyExpanded
-      ? expandedHtml
-      : html
-          .replace("</head>", `${fixtureScriptTag}</head>`)
-          .replace("</body>", `${extraBody}</body>`);
-    return route.fulfill({ contentType: "text/html; charset=utf-8", body: post });
-  });
+  await page.route(
+    (url) => url.origin + url.pathname === postUrl,
+    (route) => {
+      const post = alreadyExpanded
+        ? expandedHtml
+        : html
+            .replace("</head>", `${fixtureScriptTag}</head>`)
+            .replace("</body>", `${extraBody}</body>`);
+      return route.fulfill({ contentType: "text/html; charset=utf-8", body: post });
+    },
+  );
   await page.addInitScript({
     content: `globalThis.GM = {
       getValue: async (key) => JSON.parse(localStorage.getItem(key)),
@@ -364,7 +367,8 @@ test("reports which loader timed out when showing Retry", async ({ page }) => {
   await page.clock.install();
   await openPostPage(page, true);
   const status = page.getByRole("status");
-  await page.locator(".comments__container").evaluate((container) => {
+  const container = page.locator(".comments__container");
+  await container.evaluate((container) => {
     container.insertAdjacentHTML(
       "beforeend",
       '<button class="comment__more">Раскрыть <span class="comments__more-count">419 комментариев</span></button>',
@@ -375,11 +379,13 @@ test("reports which loader timed out when showing Retry", async ({ page }) => {
   });
 
   await page.getByRole("button", { name: "Раскрыть все комментарии" }).click();
+  await expect(container).toHaveCSS("overflow-anchor", "none");
   await page.clock.runFor(67_500);
 
   await expect(status).toHaveText(
     "Не удалось загрузить часть комментариев. Можно попробовать ещё раз.",
   );
+  await expect(container).toHaveCSS("overflow-anchor", "auto");
   expect((await warning).text()).toContain("Pikabu Comment Batch hydration timed out.");
 });
 
@@ -548,4 +554,146 @@ test("continues after a batch hydrates replies under the same top-level comment"
   await page.clock.fastForward(16_000);
   await expect(page.getByRole("status")).toHaveText("Все комментарии раскрыты.");
   await expect(container.locator(":scope > .comment")).toHaveCount(1);
+});
+
+async function openScrollablePost(page: Page) {
+  await preparePostPage(page, true);
+  await page.goto(postUrl + "?cid=1");
+  const container = page.locator(".comments__container");
+  await container.evaluate((element) => {
+    // Put the linked comment far enough down the page to scroll in either direction.
+    const comment = element.querySelector(".comment")!;
+    comment.insertAdjacentHTML("beforebegin", '<div style="height: 1200px"></div>');
+    comment.insertAdjacentHTML("afterend", '<div style="height: 2000px"></div>');
+    (element as HTMLElement).style.setProperty("overflow-anchor", "auto", "important");
+    element.insertAdjacentHTML("beforeend", '<button class="comment__more">Загрузить ещё</button>');
+    const batch = element.querySelector(".comment__more")!;
+    batch.addEventListener(
+      "click",
+      () => {
+        comment.insertAdjacentHTML(
+          "beforebegin",
+          '<div class="comment comment_loading-hidden"></div>',
+        );
+      },
+      { once: true },
+    );
+  });
+  return container;
+}
+
+async function finishScrollScenario(container: ReturnType<Page["locator"]>) {
+  await container.evaluate((element) => {
+    const comment = element.querySelector<HTMLElement>(".comment_loading-hidden")!;
+    comment.style.height = "180px";
+    comment.classList.remove("comment_loading-hidden");
+    element.querySelector(".comment__more")!.remove();
+  });
+}
+
+test("keeps a permalink comment in view during hydration and restores scroll anchoring", async ({
+  page,
+}) => {
+  const container = await openScrollablePost(page);
+  const linkedComment = container.locator("#comment_1");
+  const top = () => linkedComment.evaluate((element) => element.getBoundingClientRect().top);
+  await linkedComment.evaluate((element) => {
+    window.scrollBy(0, element.getBoundingClientRect().top - 90);
+  });
+  const originalTop = await top();
+  await page
+    .getByRole("button", { name: "Раскрыть все комментарии" })
+    .evaluate((button) => (button as HTMLButtonElement).click());
+  await expect(container.locator(".comment_loading-hidden")).toHaveCount(1);
+  await expect(container).toHaveCSS("overflow-anchor", "none");
+  await finishScrollScenario(container);
+  await expect(page.getByRole("status")).toHaveText("Все комментарии раскрыты.");
+  expect(await top()).toBeCloseTo(originalTop, 0);
+  await expect(container).toHaveCSS("overflow-anchor", "auto");
+  expect(
+    await container.evaluate((element) =>
+      (element as HTMLElement).style.getPropertyPriority("overflow-anchor"),
+    ),
+  ).toBe("important");
+  await expect(page.getByRole("button", { name: "Остановить" })).toHaveCount(0);
+});
+
+for (const input of ["wheel", "touch", "keyboard"] as const) {
+  test("yields viewport compensation to " + input + " scrolling", async ({ page }) => {
+    const container = await openScrollablePost(page);
+    await container.locator("#comment_1").evaluate((element) => {
+      window.scrollBy(0, element.getBoundingClientRect().top - 90);
+      // Isolate script compensation from the browser's native scroll anchoring.
+      document.documentElement.style.overflowAnchor = "none";
+    });
+    await page
+      .getByRole("button", { name: "Раскрыть все комментарии" })
+      .evaluate((button) => (button as HTMLButtonElement).click());
+    await expect(container.locator(".comment_loading-hidden")).toHaveCount(1);
+    const scrollY = () => page.evaluate(() => window.scrollY);
+    const beforeInput = await scrollY();
+    if (input === "wheel") {
+      await page.mouse.move(160, 160);
+      await page.mouse.wheel(0, 250);
+      await expect.poll(scrollY).toBe(beforeInput + 250);
+    } else {
+      await page.evaluate((kind) => {
+        const event =
+          kind === "touch"
+            ? new TouchEvent("touchstart", { bubbles: true })
+            : new KeyboardEvent("keydown", { key: "PageDown", bubbles: true });
+        document.body.dispatchEvent(event);
+        window.scrollBy(0, 250);
+      }, input);
+    }
+    const readerPosition = await scrollY();
+    await finishScrollScenario(container);
+    await expect(page.getByRole("status")).toHaveText("Все комментарии раскрыты.");
+    expect(await scrollY()).toBe(readerPosition);
+  });
+}
+
+test("shows a themed floating Stop at 360px and returns keyboard focus without scrolling", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 360, height: 640 });
+  const container = await openScrollablePost(page);
+  await page.addStyleTag({
+    content: `
+      :root { --color-black-300: #f7f8fc; --color-black-940: #1b1e24; }
+      :root[data-theme-dark] { --color-black-300: #222326; --color-black-940: #e0e3ea; }
+      .story-comments__menu { display: flex; align-items: center; padding: 0 24px; }
+      .menu { display: flex; }
+    `,
+  });
+  const start = page.getByRole("button", { name: "Раскрыть все комментарии" });
+  const stop = page.getByRole("button", { name: "Остановить", exact: true });
+  await expect(start).toHaveCSS("color", "rgb(27, 30, 36)");
+  await expect(start).toHaveCSS("background-color", "rgb(247, 248, 252)");
+  await expect(await openSettings(page)).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(360);
+  expect((await start.boundingBox())?.height).toBeGreaterThanOrEqual(44);
+
+  await start.click();
+  await expect(stop).toHaveCount(1);
+  await page.evaluate(() => window.scrollTo(0, 800));
+  await expect(stop).toHaveCount(2);
+  const floatingStop = stop.last();
+  await expect(floatingStop).toBeInViewport();
+  await expect(floatingStop).toHaveCSS("background-color", "rgb(247, 248, 252)");
+  await page.evaluate(() => document.documentElement.setAttribute("data-theme-dark", ""));
+  await expect(floatingStop).toHaveCSS("background-color", "rgb(34, 35, 38)");
+  await expect(stop.first()).toHaveCSS("color", "rgb(224, 227, 234)");
+
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await expect(stop).toHaveCount(1);
+  await page.evaluate(() => window.scrollTo(0, 800));
+  await expect(stop).toHaveCount(2);
+  await floatingStop.focus();
+  await page.keyboard.press("Enter");
+  await expect(stop).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Продолжить" })).toBeFocused();
+  expect(await page.evaluate(() => window.scrollY)).toBe(800);
+  await expect(container).toHaveCSS("overflow-anchor", "auto");
+  await finishScrollScenario(container);
 });
