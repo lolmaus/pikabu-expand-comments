@@ -13,9 +13,12 @@
     "build": "node lib/build.mts",
     "test": "vitest run",
     "test:e2e": "pnpm run build && playwright test",
-    "test:live": "pnpm run build && playwright test --config playwright.live.config.mts"
+    "test:live": "pnpm run build && playwright test --config playwright.live.config.mts",
+    "ui:audit": "pnpm run build && playwright test --config playwright.visual.config.mts",
+    "ui:capture": "pnpm run build && node tests/visual/capture.mts"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.14.0",
     "@commitlint/cli": "21.2.4",
     "@commitlint/config-conventional": "21.2.4",
     "@playwright/test": "1.65.1",
