@@ -39,17 +39,8 @@ test("resolves Pikabu light and dark tokens, passes axe-core, has no page overfl
       expect(tabBar.page.scrollWidth).toBeLessThanOrEqual(tabBar.page.innerWidth);
 
       const axe = await auditAxe(page);
-      expect(Array.isArray(axe.violations)).toBe(true);
+      expect(axe.violations, `axe-core violations (${theme} ${viewport.name})`).toEqual([]);
       expect(Array.isArray(axe.incomplete)).toBe(true);
-      // Pre-redesign baseline only has the known scroll-to-bottom label-content-name-mismatch;
-      // zero unexpected WCAG violations are allowed on main (strict 0-violation gate runs in `pnpm run ui:audit`).
-      const unexpectedAxeViolations = axe.violations.filter(
-        (finding) => finding.id !== "label-content-name-mismatch",
-      );
-      expect(
-        unexpectedAxeViolations,
-        `Unexpected axe-core violations (${theme} ${viewport.name})`,
-      ).toEqual([]);
 
       const contrast = await auditShadowContrast(page);
       const textFailures = contrast.failures.filter((sample) => sample.kind === "text");

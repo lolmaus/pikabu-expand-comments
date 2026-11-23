@@ -1,0 +1,840 @@
+<!doctype html>
+<!--
+  PROTOTYPE — Throwaway interactive UI prototype for Wayfinder Ticket #24
+  "Three structurally distinct Pikabu-native variants of top & bottom on-page controls,
+   switchable via ?variant=A|B|C and a floating bottom bar, inside the Pikabu light/dark shell."
+-->
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Prototype — Pikabu On-Page Controls Redesign (#24)</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --color-black-300: #f7f8fc;
+        --color-bright-800: #fcfdff;
+        --color-black-430: #ebedf2;
+        --color-black-440: #e7e8ea;
+        --color-black-940: #1b1e24;
+        --color-black-800: #444850;
+        --color-black-700: #70737b;
+        --color-primary-900: #65ab3c;
+        --color-primary-700: #8bca58;
+        --color-primary-100: #f8fff2;
+        --color-danger-800: #f75c48;
+        --shadow-medium: 0 4px 20px 0 rgba(0, 0, 0, 0.08);
+        --c-btn-secondary-bgDefault: #dcdee5;
+        --c-btn-secondary-bgHover: #ced1d9;
+        --c-btnIcon-primary-bgHover: rgba(31, 32, 33, 0.08);
+        --focus-ring: color-mix(in srgb, var(--color-primary-900) 76%, var(--color-black-940));
+        --error-text: color-mix(in srgb, var(--color-danger-800) 58%, var(--color-black-940));
+        --green-text: color-mix(in srgb, var(--color-primary-900) 78%, var(--color-black-940));
+      }
+
+      :root[data-theme-dark] {
+        color-scheme: dark;
+        --color-black-300: #222326;
+        --color-bright-800: #292a2e;
+        --color-black-430: #37393d;
+        --color-black-440: #2d3236;
+        --color-black-940: #e0e3ea;
+        --color-black-800: #b9bdc7;
+        --color-black-700: #8f939d;
+        --color-primary-900: #618f45;
+        --color-primary-700: #638c47;
+        --color-primary-100: #282f2e;
+        --color-danger-800: #ca4533;
+        --shadow-medium: 0 4px 20px 0 rgba(0, 0, 0, 0.24);
+        --c-btn-secondary-bgDefault: #45474d;
+        --c-btn-secondary-bgHover: #5e6066;
+        --c-btnIcon-primary-bgHover: rgba(255, 255, 255, 0.08);
+      }
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        padding-bottom: 96px;
+        background: var(--color-black-300);
+        color: var(--color-black-940);
+        font:
+          400 14px / 22px Roboto,
+          "Open Sans",
+          Helvetica,
+          Arial,
+          sans-serif;
+      }
+
+      .proto-controls {
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: center;
+        gap: 8px 14px;
+        padding: 10px 16px;
+        background: var(--color-bright-800);
+        border-bottom: 1px solid var(--color-black-430);
+        font-size: 12px;
+      }
+
+      .proto-group {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+      }
+
+      .proto-group strong {
+        margin-right: 4px;
+        color: var(--color-black-700);
+        font-weight: 500;
+      }
+
+      .proto-chip {
+        height: 26px;
+        padding: 0 9px;
+        border: 1px solid var(--color-black-430);
+        border-radius: 6px;
+        background: transparent;
+        color: var(--color-black-800);
+        font: 500 12px / 16px inherit;
+        cursor: pointer;
+      }
+
+      .proto-chip[aria-pressed="true"] {
+        background: var(--c-btn-secondary-bgDefault);
+        color: var(--color-black-940);
+        border-color: transparent;
+      }
+
+      .pikabu-shell {
+        max-width: 1054px;
+        margin: 24px auto;
+        padding: 0 16px;
+        display: flex;
+        align-items: flex-start;
+        gap: 20px;
+      }
+
+      .pikabu-shell[data-width="1024"] {
+        max-width: 1024px;
+      }
+
+      .pikabu-main {
+        flex: 1 1 702px;
+        max-width: 702px;
+        min-width: 0;
+      }
+
+      .pikabu-shell[data-width="1024"] .pikabu-main {
+        max-width: 672px;
+      }
+
+      .pikabu-sidebar {
+        flex: 0 0 300px;
+        padding: 16px;
+        border: 1px solid var(--color-black-430);
+        border-radius: 8px;
+        background: var(--color-bright-800);
+        color: var(--color-black-700);
+        font-size: 13px;
+      }
+
+      .variant-banner {
+        margin-bottom: 14px;
+        padding: 12px 16px;
+        border: 1px solid var(--color-black-430);
+        border-radius: 8px;
+        background: var(--color-bright-800);
+        font-size: 13px;
+        color: var(--color-black-800);
+      }
+
+      .variant-banner strong {
+        color: var(--color-black-940);
+      }
+
+      .story-comments__menu {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: nowrap;
+        padding: 0 24px;
+        border: 1px solid var(--color-black-430);
+        border-radius: 8px 8px 0 0;
+        background: var(--color-bright-800);
+        overflow: hidden;
+      }
+
+      .menu {
+        display: flex;
+      }
+
+      .menu_horizontal {
+        width: 100%;
+        line-height: 48px;
+        font-weight: 500;
+        color: var(--color-black-700);
+      }
+
+      .menu_horizontal .menu__item {
+        display: block;
+        position: relative;
+        margin-right: 20px;
+        white-space: nowrap;
+        color: currentColor;
+        text-decoration: none;
+      }
+
+      .story-comments__menu .menu__item_current {
+        color: var(--color-primary-900);
+      }
+
+      .menu_horizontal .menu__item::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        bottom: 0;
+        width: 100%;
+        height: 2px;
+        background-color: var(--color-primary-700);
+        opacity: 0;
+      }
+
+      .menu_horizontal .menu__item_current::before {
+        opacity: 1;
+      }
+
+      section.comments {
+        padding: 16px 24px;
+        border: 1px solid var(--color-black-430);
+        border-top: 0;
+        background: var(--color-bright-800);
+      }
+
+      .comment {
+        padding: 10px 0;
+        border-bottom: 1px solid var(--color-black-430);
+      }
+
+      .comment:last-of-type {
+        border-bottom: 0;
+      }
+
+      .comment__meta {
+        font-size: 12px;
+        color: var(--color-black-700);
+        margin-bottom: 4px;
+      }
+
+      .comment-toggle-children {
+        display: inline-block;
+        margin-top: 4px;
+        color: var(--color-primary-900);
+        font-size: 13px;
+      }
+
+      .comment__more {
+        display: inline-block;
+        width: 100%;
+        height: 32px;
+        margin-top: 16px;
+        padding: 0 20px;
+        border: 0;
+        border-radius: 8px;
+        background: var(--color-black-440);
+        color: var(--color-black-700);
+        font: 500 13.3333px / 32px inherit;
+        text-align: center;
+      }
+
+      section[data-role="answer"] {
+        padding: 16px 24px;
+        border: 1px solid var(--color-black-430);
+        border-top: 0;
+        border-radius: 0 0 8px 8px;
+        background: var(--color-black-300);
+        color: var(--color-black-700);
+      }
+
+      /* Shared prototype control primitives */
+      .ctrl-host-top {
+        display: inline-flex;
+        flex: 0 0 auto;
+        align-items: center;
+        gap: 6px;
+        margin-inline-start: 12px;
+        block-size: 32px;
+        font-size: 13px;
+        line-height: 16px;
+        white-space: nowrap;
+      }
+
+      .ctrl-host-bottom {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 8px 12px;
+        margin-block-start: 12px;
+        padding-block-start: 12px;
+        border-top: 1px solid var(--color-black-430);
+        font-size: 13px;
+        line-height: 16px;
+      }
+
+      .ctrl-group {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .ctrl-status {
+        font-size: 12px;
+        color: var(--color-black-800);
+        max-inline-size: 192px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .ctrl-status[data-error="true"] {
+        color: var(--error-text);
+      }
+
+      .ctrl-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        block-size: 32px;
+        padding: 0 12px;
+        border: 0;
+        border-radius: 8px;
+        background: var(--c-btn-secondary-bgDefault);
+        color: var(--color-black-940);
+        font: 500 13px / 16px inherit;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+
+      .ctrl-btn:hover {
+        background: var(--c-btn-secondary-bgHover);
+      }
+
+      .ctrl-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        inline-size: 32px;
+        block-size: 32px;
+        border: 0;
+        border-radius: 8px;
+        background: transparent;
+        color: var(--color-black-800);
+        cursor: pointer;
+      }
+
+      .ctrl-icon:hover,
+      .ctrl-icon[aria-expanded="true"] {
+        background: var(--c-btnIcon-primary-bgHover);
+        color: var(--color-black-940);
+      }
+
+      .ctrl-icon.trailing {
+        margin-inline-end: -6px;
+      }
+
+      .ctrl-counter {
+        display: inline-flex;
+        align-items: center;
+        block-size: 24px;
+        padding: 0 8px;
+        border-radius: 12px;
+        background: var(--color-black-300);
+        color: var(--color-black-800);
+        font-size: 12px;
+        font-weight: 500;
+        font-variant-numeric: tabular-nums;
+      }
+
+      /* Variant B: Segmented pill + text triggers */
+      .seg-pill {
+        display: inline-flex;
+        align-items: center;
+        block-size: 32px;
+        border-radius: 8px;
+        background: var(--c-btn-secondary-bgDefault);
+        overflow: hidden;
+      }
+
+      .seg-pill .ctrl-btn {
+        border-radius: 0;
+        background: transparent;
+      }
+
+      .seg-pill .ctrl-btn:hover {
+        background: var(--c-btn-secondary-bgHover);
+      }
+
+      .seg-count {
+        padding: 0 9px;
+        border-left: 1px solid var(--color-black-430);
+        font-size: 12px;
+        font-weight: 500;
+        font-variant-numeric: tabular-nums;
+        color: var(--color-black-800);
+      }
+
+      .ghost-text-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        block-size: 30px;
+        padding: 0 8px;
+        border: 0;
+        border-radius: 8px;
+        background: transparent;
+        color: var(--color-black-800);
+        font: 500 12px / 16px inherit;
+        cursor: pointer;
+      }
+
+      .ghost-text-btn:hover {
+        background: var(--c-btnIcon-primary-bgHover);
+        color: var(--color-black-940);
+      }
+
+      /* Variant C: Quiet inline text links (Pikabu .comment__control style) */
+      .link-action {
+        block-size: 30px;
+        padding: 0 6px;
+        border: 0;
+        border-radius: 6px;
+        background: transparent;
+        color: var(--green-text);
+        font: 500 13px / 16px inherit;
+        cursor: pointer;
+      }
+
+      .link-action:hover {
+        background: var(--color-primary-100);
+      }
+
+      .plain-count {
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+        color: var(--color-black-800);
+      }
+
+      .proto-popover {
+        position: fixed;
+        inset: auto;
+        margin: 0;
+        padding: 6px;
+        border: 1px solid var(--color-black-430);
+        border-radius: 8px;
+        background: var(--color-bright-800);
+        color: var(--color-black-940);
+        box-shadow: var(--shadow-medium);
+        font-size: 13px;
+        z-index: 50;
+      }
+
+      .proto-popover label {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 8px;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+
+      .proto-popover label:hover {
+        background: var(--c-btnIcon-primary-bgHover);
+      }
+
+      .proto-popover input {
+        inline-size: 16px;
+        block-size: 16px;
+        margin: 0;
+        accent-color: var(--color-primary-900);
+      }
+
+      /* Floating bottom variant switcher per prototype/UI.md */
+      .variant-switcher {
+        position: fixed;
+        left: 50%;
+        bottom: 16px;
+        transform: translateX(-50%);
+        z-index: 100;
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 6px 10px;
+        border-radius: 999px;
+        background: #1b1e24;
+        color: #fcfdff;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.32);
+        font-size: 13px;
+        font-weight: 500;
+      }
+
+      .variant-switcher button {
+        inline-size: 28px;
+        block-size: 28px;
+        border: 0;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.14);
+        color: #fcfdff;
+        font-size: 14px;
+        cursor: pointer;
+      }
+
+      .variant-switcher button:hover {
+        background: rgba(255, 255, 255, 0.24);
+      }
+
+      .variant-switcher .label {
+        min-width: 240px;
+        text-align: center;
+      }
+
+      [hidden] {
+        display: none !important;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="proto-controls" role="region" aria-label="Prototype controls">
+      <div class="proto-group">
+        <strong>Theme:</strong>
+        <button class="proto-chip" data-theme="light" aria-pressed="true">Light</button>
+        <button class="proto-chip" data-theme="dark" aria-pressed="false">Dark</button>
+      </div>
+      <div class="proto-group">
+        <strong>Viewport:</strong>
+        <button class="proto-chip" data-width="1280" aria-pressed="true">
+          1280px (702px card)
+        </button>
+        <button class="proto-chip" data-width="1024" aria-pressed="false">
+          1024px (672px card)
+        </button>
+      </div>
+      <div class="proto-group">
+        <strong>State:</strong>
+        <button class="proto-chip" data-state="idle" aria-pressed="true">Idle</button>
+        <button class="proto-chip" data-state="running" aria-pressed="false">Running</button>
+        <button class="proto-chip" data-state="stopped" aria-pressed="false">Stopped</button>
+        <button class="proto-chip" data-state="error" aria-pressed="false">Error</button>
+        <button class="proto-chip" data-state="completed" aria-pressed="false">Completed</button>
+        <button class="proto-chip" data-state="skipped" aria-pressed="false">Skipped (2)</button>
+      </div>
+    </div>
+
+    <div class="pikabu-shell" id="shell" data-width="1280">
+      <main class="pikabu-main">
+        <div class="variant-banner" id="variant-summary"></div>
+
+        <section class="story-comments__menu" id="top-menu">
+          <div class="menu menu_horizontal">
+            <a class="menu__item menu__item_current" href="#comments">Все комментарии</a>
+            <a class="menu__item" href="#author">Автора</a>
+          </div>
+          <span class="ctrl-host-top" id="top-controls"></span>
+        </section>
+
+        <section class="comments">
+          <div class="comments__container">
+            <div class="comment">
+              <div class="comment__meta">pikabushnik · 2 часа назад · +142</div>
+              <div>Отличный пост, интересно почитать обсуждение целиком.</div>
+              <span class="comment-toggle-children">раскрыть ветку (3)</span>
+            </div>
+            <div class="comment">
+              <div class="comment__meta">reader_42 · 1 час назад · +38</div>
+              <div>Добавлю ещё один комментарий для реалистичной плотности ветки.</div>
+            </div>
+            <div class="comment__more" id="batch-loader">Раскрыть 7 комментариев</div>
+          </div>
+          <div class="ctrl-host-bottom" id="bottom-controls"></div>
+        </section>
+
+        <section data-role="answer">Чтобы оставить комментарий, необходимо войти</section>
+      </main>
+      <aside class="pikabu-sidebar">Боковая колонка Pikabu (300px)</aside>
+    </div>
+
+    <div class="proto-popover" id="popover" role="dialog" aria-label="Настройки" hidden>
+      <label>
+        <input type="checkbox" id="auto-expand" />
+        <span>Раскрывать комментарии при открытии поста</span>
+      </label>
+    </div>
+
+    <nav class="variant-switcher" aria-label="Variant switcher">
+      <button type="button" id="prev-variant" aria-label="Previous variant">←</button>
+      <span class="label" id="variant-label"></span>
+      <button type="button" id="next-variant" aria-label="Next variant">→</button>
+    </nav>
+
+    <script>
+      const VARIANTS = [
+        {
+          key: "A",
+          name: "Integrated Compact Strip (Recommended)",
+          summary:
+            "<strong>Variant A — Integrated Compact Strip (Critic-verified in userscript):</strong> Single-row 32px strip; recessed counter pill (<code>3 / 10</code>) + Pikabu secondary action button + ghost icon buttons (double-chevron scroll-to-bottom &amp; gear) + top-layer settings popover + hairline-separated bottom footer.",
+        },
+        {
+          key: "B",
+          name: "Segmented Action Pill + Labeled Triggers",
+          summary:
+            "<strong>Variant B — Segmented Action Pill + Labeled Triggers:</strong> Merges primary action and counter into one split pill (<code>[ Раскрыть все комментарии | 3 / 10 ]</code>) paired with compact text/icon triggers (<code>Вниз</code> + gear) for higher explicitness on wide bars.",
+        },
+        {
+          key: "C",
+          name: "Quiet Inline Text Controls",
+          summary:
+            "<strong>Variant C — Quiet Inline Text Controls:</strong> Mirrors Pikabu's borderless green <code>.comment__control</code> typography — no button box in the header, plain muted counter, and ghost icons for maximum visual invisibility.",
+        },
+      ];
+
+      const STATES = {
+        idle: {
+          action: "Раскрыть все комментарии",
+          counter: "3 / 10",
+          status: "",
+          showBatch: true,
+          error: false,
+        },
+        running: {
+          action: "Остановить",
+          counter: "5 / 10",
+          status: "Раскрываем комментарии…",
+          showBatch: true,
+          error: false,
+        },
+        stopped: {
+          action: "Продолжить",
+          counter: "5 / 10",
+          status: "Раскрытие остановлено.",
+          showBatch: true,
+          error: false,
+        },
+        error: {
+          action: "Повторить",
+          counter: "5 / 10",
+          status: "Ошибка загрузки комментариев.",
+          showBatch: true,
+          error: true,
+        },
+        completed: {
+          action: "",
+          counter: "10 / 10",
+          status: "Все комментарии раскрыты.",
+          showBatch: false,
+          error: false,
+        },
+        skipped: {
+          action: "",
+          counter: "8 / 10",
+          status: "Не удалось раскрыть 2 ветки.",
+          showBatch: false,
+          error: false,
+        },
+      };
+
+      const SCROLL_SVG =
+        '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 4.25 8 7.75 11.5 4.25M4.5 8.5 8 12 11.5 8.5"/></svg>';
+      const GEAR_SVG =
+        '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.7 2.2h2.6l.35 1.55a4.6 4.6 0 0 1 1.15.66l1.52-.48 1.3 2.25-1.18 1.08a4.7 4.7 0 0 1 0 1.48l1.18 1.08-1.3 2.25-1.52-.48a4.6 4.6 0 0 1-1.15.66l-.35 1.55H6.7l-.35-1.55a4.6 4.6 0 0 1-1.15-.66l-1.52.48-1.3-2.25 1.18-1.08a4.7 4.7 0 0 1 0-1.48L2.38 6.18l1.3-2.25 1.52.48a4.6 4.6 0 0 1 1.15-.66L6.7 2.2Z"/><circle cx="8" cy="8" r="1.85"/></svg>';
+
+      const params = new URLSearchParams(location.search);
+      let variantIdx = Math.max(
+        0,
+        VARIANTS.findIndex((v) => v.key === (params.get("variant") || "A").toUpperCase()),
+      );
+      let currentState = "idle";
+      let openAnchor = null;
+
+      const shell = document.getElementById("shell");
+      const topControls = document.getElementById("top-controls");
+      const bottomControls = document.getElementById("bottom-controls");
+      const topMenu = document.getElementById("top-menu");
+      const batchLoader = document.getElementById("batch-loader");
+      const popover = document.getElementById("popover");
+      const variantLabel = document.getElementById("variant-label");
+      const variantSummary = document.getElementById("variant-summary");
+
+      function closePopover() {
+        popover.hidden = true;
+        if (openAnchor) openAnchor.setAttribute("aria-expanded", "false");
+        openAnchor = null;
+      }
+
+      function togglePopover(btn, placement) {
+        if (openAnchor === btn && !popover.hidden) {
+          closePopover();
+          return;
+        }
+        closePopover();
+        openAnchor = btn;
+        btn.setAttribute("aria-expanded", "true");
+        popover.hidden = false;
+        const rect = btn.getBoundingClientRect();
+        const width = popover.offsetWidth || 280;
+        const height = popover.offsetHeight || 44;
+        const left = Math.max(8, Math.min(rect.right - width, innerWidth - width - 8));
+        const below =
+          placement === "top"
+            ? Math.max(rect.bottom + 6, topMenu.getBoundingClientRect().bottom + 4)
+            : rect.bottom + 6;
+        const top = below + height <= innerHeight - 8 ? below : Math.max(8, rect.top - height - 6);
+        popover.style.left = `${Math.round(left)}px`;
+        popover.style.top = `${Math.round(top)}px`;
+      }
+
+      function render() {
+        closePopover();
+        const variant = VARIANTS[variantIdx];
+        const st = STATES[currentState];
+        variantLabel.textContent = `${variant.key}: ${variant.name}`;
+        variantSummary.innerHTML = variant.summary;
+        batchLoader.hidden = !st.showBatch;
+
+        const statusHtml = st.status
+          ? `<span class="ctrl-status" data-error="${st.error}" title="${st.status}">${st.status}</span>`
+          : "";
+
+        if (variant.key === "A") {
+          const actionHtml = st.action
+            ? `<button class="ctrl-btn" type="button">${st.action}</button>`
+            : "";
+          topControls.innerHTML = `
+            ${statusHtml}
+            <span class="ctrl-counter">${st.counter}</span>
+            ${actionHtml}
+            <button class="ctrl-icon" type="button" title="Перейти к концу комментариев" aria-label="Перейти к концу комментариев">${SCROLL_SVG}</button>
+            <button class="ctrl-icon trailing" data-settings="top" type="button" title="Настройки" aria-label="Настройки" aria-expanded="false">${GEAR_SVG}</button>
+          `;
+          bottomControls.innerHTML = `
+            <div class="ctrl-group">${actionHtml}${statusHtml}</div>
+            <div class="ctrl-group">
+              <span class="ctrl-counter">${st.counter}</span>
+              <button class="ctrl-icon" data-settings="bottom" type="button" title="Настройки" aria-label="Настройки" aria-expanded="false">${GEAR_SVG}</button>
+            </div>
+          `;
+        } else if (variant.key === "B") {
+          const pillHtml = st.action
+            ? `<span class="seg-pill"><button class="ctrl-btn" type="button">${st.action}</button><span class="seg-count">${st.counter}</span></span>`
+            : `<span class="ctrl-counter">${st.counter}</span>`;
+          topControls.innerHTML = `
+            ${statusHtml}
+            ${pillHtml}
+            <button class="ghost-text-btn" type="button">${SCROLL_SVG}<span>Вниз</span></button>
+            <button class="ctrl-icon trailing" data-settings="top" type="button" title="Настройки" aria-label="Настройки" aria-expanded="false">${GEAR_SVG}</button>
+          `;
+          bottomControls.innerHTML = `
+            <div class="ctrl-group">${pillHtml}${statusHtml}</div>
+            <div class="ctrl-group">
+              <button class="ghost-text-btn" data-settings="bottom" type="button" aria-expanded="false">${GEAR_SVG}<span>Настройки</span></button>
+            </div>
+          `;
+        } else {
+          const actionHtml = st.action
+            ? `<button class="link-action" type="button">${st.action}</button>`
+            : "";
+          topControls.innerHTML = `
+            ${statusHtml}
+            <span class="plain-count">${st.counter}</span>
+            ${actionHtml}
+            <button class="ctrl-icon" type="button" title="Перейти к концу комментариев" aria-label="Перейти к концу комментариев">${SCROLL_SVG}</button>
+            <button class="ctrl-icon trailing" data-settings="top" type="button" title="Настройки" aria-label="Настройки" aria-expanded="false">${GEAR_SVG}</button>
+          `;
+          bottomControls.innerHTML = `
+            <div class="ctrl-group">${actionHtml}${statusHtml}</div>
+            <div class="ctrl-group">
+              <span class="plain-count">${st.counter}</span>
+              <button class="ctrl-icon" data-settings="bottom" type="button" title="Настройки" aria-label="Настройки" aria-expanded="false">${GEAR_SVG}</button>
+            </div>
+          `;
+        }
+
+        document.querySelectorAll("[data-settings]").forEach((btn) => {
+          btn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            togglePopover(btn, btn.getAttribute("data-settings"));
+          });
+        });
+
+        const url = new URL(location.href);
+        url.searchParams.set("variant", variant.key);
+        history.replaceState(null, "", url);
+      }
+
+      document.addEventListener("click", (e) => {
+        if (!popover.hidden && !popover.contains(e.target)) closePopover();
+      });
+
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") closePopover();
+        if (e.target.matches("input, textarea, [contenteditable]")) return;
+        if (e.key === "ArrowLeft") {
+          variantIdx = (variantIdx + VARIANTS.length - 1) % VARIANTS.length;
+          render();
+        } else if (e.key === "ArrowRight") {
+          variantIdx = (variantIdx + 1) % VARIANTS.length;
+          render();
+        }
+      });
+
+      document.getElementById("prev-variant").addEventListener("click", () => {
+        variantIdx = (variantIdx + VARIANTS.length - 1) % VARIANTS.length;
+        render();
+      });
+      document.getElementById("next-variant").addEventListener("click", () => {
+        variantIdx = (variantIdx + 1) % VARIANTS.length;
+        render();
+      });
+
+      document.querySelectorAll("[data-theme]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const dark = btn.getAttribute("data-theme") === "dark";
+          document.documentElement.toggleAttribute("data-theme-dark", dark);
+          document
+            .querySelectorAll("[data-theme]")
+            .forEach((b) => b.setAttribute("aria-pressed", String(b === btn)));
+        });
+      });
+
+      document.querySelectorAll("[data-width]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          shell.dataset.width = btn.getAttribute("data-width");
+          document
+            .querySelectorAll("[data-width]")
+            .forEach((b) => b.setAttribute("aria-pressed", String(b === btn)));
+        });
+      });
+
+      document.querySelectorAll("[data-state]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          currentState = btn.getAttribute("data-state");
+          document
+            .querySelectorAll("[data-state]")
+            .forEach((b) => b.setAttribute("aria-pressed", String(b === btn)));
+          render();
+        });
+      });
+
+      render();
+    </script>
+  </body>
+</html>

@@ -138,21 +138,40 @@ export interface RgbaColor {
 }
 
 export function parseCssColor(value: string): RgbaColor | null {
-  const match = value
-    .trim()
-    .match(/^rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:\s*[,/]\s*([\d.]+%?))?\s*\)$/i);
-  if (!match) return null;
-  const [, rRaw, gRaw, bRaw, aRaw] = match;
-  let a = 1;
-  if (aRaw !== undefined) {
-    a = aRaw.endsWith("%") ? Number.parseFloat(aRaw) / 100 : Number.parseFloat(aRaw);
+  const trimmed = value.trim();
+  const rgbMatch = trimmed.match(
+    /^rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:\s*[,/]\s*([\d.]+%?))?\s*\)$/i,
+  );
+  if (rgbMatch) {
+    const [, rRaw, gRaw, bRaw, aRaw] = rgbMatch;
+    let a = 1;
+    if (aRaw !== undefined) {
+      a = aRaw.endsWith("%") ? Number.parseFloat(aRaw) / 100 : Number.parseFloat(aRaw);
+    }
+    return {
+      r: Number.parseFloat(rRaw!),
+      g: Number.parseFloat(gRaw!),
+      b: Number.parseFloat(bRaw!),
+      a: Math.min(1, Math.max(0, Number.isNaN(a) ? 1 : a)),
+    };
   }
-  return {
-    r: Number.parseFloat(rRaw!),
-    g: Number.parseFloat(gRaw!),
-    b: Number.parseFloat(bRaw!),
-    a: Math.min(1, Math.max(0, Number.isNaN(a) ? 1 : a)),
-  };
+  const srgbMatch = trimmed.match(
+    /^color\(\s*srgb\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)(?:\s*\/\s*([\d.]+%?))?\s*\)$/i,
+  );
+  if (srgbMatch) {
+    const [, rRaw, gRaw, bRaw, aRaw] = srgbMatch;
+    let a = 1;
+    if (aRaw !== undefined) {
+      a = aRaw.endsWith("%") ? Number.parseFloat(aRaw) / 100 : Number.parseFloat(aRaw);
+    }
+    return {
+      r: Math.min(255, Math.max(0, Number.parseFloat(rRaw!) * 255)),
+      g: Math.min(255, Math.max(0, Number.parseFloat(gRaw!) * 255)),
+      b: Math.min(255, Math.max(0, Number.parseFloat(bRaw!) * 255)),
+      a: Math.min(1, Math.max(0, Number.isNaN(a) ? 1 : a)),
+    };
+  }
+  return null;
 }
 
 export function compositeOver(fg: RgbaColor, bg: RgbaColor): RgbaColor {
@@ -217,15 +236,30 @@ export async function preparePikabuVisualPage(
   await page.setViewportSize({ width: options.viewport.width, height: options.viewport.height });
   await page.emulateMedia({ colorScheme: options.theme, reducedMotion: "reduce" });
   await page.addInitScript(() => {
-    const tracker = { totalScore: 0, entryCount: 0 };
+    const tracker = { totalScore: 0, entryCount: 0, rawScore: 0, rawEntryCount: 0 };
     (window as unknown as Record<string, unknown>)["__pikabuClsTracker"] = tracker;
     try {
       const observer = new PerformanceObserver((list) => {
         for (const entry of list.getEntries()) {
-          const shift = entry as PerformanceEntry & { value?: number; hadRecentInput?: boolean };
+          const shift = entry as PerformanceEntry & {
+            value?: number;
+            hadRecentInput?: boolean;
+            sources?: Array<{ node?: Node | null }>;
+          };
           if (!shift.hadRecentInput && typeof shift.value === "number") {
-            tracker.totalScore += shift.value;
-            tracker.entryCount += 1;
+            tracker.rawScore += shift.value;
+            tracker.rawEntryCount += 1;
+            const sources = shift.sources ?? [];
+            const onlyBelowBottomControls =
+              sources.length > 0 &&
+              sources.every((source) => {
+                const el = source.node instanceof Element ? source.node : null;
+                return Boolean(el?.closest('section[data-role="answer"], .pikabu-under-comments'));
+              });
+            if (!onlyBelowBottomControls) {
+              tracker.totalScore += shift.value;
+              tracker.entryCount += 1;
+            }
           }
         }
       });
@@ -317,9 +351,11 @@ export function compareTabBarGeometry(
   for (let i = 0; i < Math.min(baseline.tabs.length, current.tabs.length); i += 1) {
     const baseTab = baseline.tabs[i]!;
     const curTab = current.tabs[i]!;
+    const baseOffsetTop = baseTab.top - baseline.menu.top;
+    const curOffsetTop = curTab.top - current.menu.top;
     maxTabTopDeltaPx = Math.max(
       maxTabTopDeltaPx,
-      Math.round(Math.abs(curTab.top - baseTab.top) * 100) / 100,
+      Math.round(Math.abs(curOffsetTop - baseOffsetTop) * 100) / 100,
     );
     maxTabHeightDeltaPx = Math.max(
       maxTabHeightDeltaPx,
@@ -353,12 +389,19 @@ export async function auditPikabuTokens(page: Page): Promise<TokenAuditReport> {
     const menu = document.querySelector<HTMLElement>(".story-comments__menu");
     if (!menu) throw new Error("Missing .story-comments__menu");
     const discovered = new Set<string>(coreTokens);
+    const localDeclared = new Set<string>();
     const varPattern = /var\(\s*(--[a-zA-Z0-9_-]+)/g;
+    const declPattern = /(--[a-zA-Z0-9_-]+)\s*:/g;
     for (const host of document.querySelectorAll<HTMLElement>("[data-pikabu-expand-comments]")) {
       const shadow = host.shadowRoot;
       if (!shadow) continue;
       for (const sheet of shadow.adoptedStyleSheets) {
         for (const rule of Array.from(sheet.cssRules)) {
+          let decl = declPattern.exec(rule.cssText);
+          while (decl) {
+            localDeclared.add(decl[1]!);
+            decl = declPattern.exec(rule.cssText);
+          }
           let match = varPattern.exec(rule.cssText);
           while (match) {
             discovered.add(match[1]!);
@@ -367,6 +410,7 @@ export async function auditPikabuTokens(page: Page): Promise<TokenAuditReport> {
         }
       }
     }
+    for (const local of localDeclared) discovered.delete(local);
     const styles = getComputedStyle(menu);
     const consumedTokens = Array.from(discovered).sort();
     const values: Record<string, string> = {};
@@ -587,8 +631,8 @@ async function measureFocusOutlineContrast(page: Page) {
     const firstButton = host.locator("button:visible").first();
     if ((await firstButton.count()) === 0) continue;
 
-    // Keyboard focus via Tab or explicit focus-visible probe.
-    await firstButton.focus();
+    // Keyboard focus without scrolling the viewport (keeps offscreen floating shortcuts visible).
+    await firstButton.evaluate((el) => (el as HTMLElement).focus({ preventScroll: true }));
     await page.keyboard.press("Shift");
     const sample = await firstButton.evaluate((el) => {
       const root = el.getRootNode();

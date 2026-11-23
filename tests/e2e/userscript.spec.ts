@@ -404,9 +404,7 @@ test("reports which loader timed out when showing Retry", async ({ page }) => {
   await expect(container).toHaveCSS("overflow-anchor", "none");
   await page.clock.runFor(67_500);
 
-  await expect(status).toHaveText(
-    "Не удалось загрузить часть комментариев. Можно попробовать ещё раз.",
-  );
+  await expect(status).toHaveText("Ошибка загрузки комментариев.");
   await expect(container).toHaveCSS("overflow-anchor", "auto");
   expect((await warning).text()).toContain("Pikabu Comment Batch hydration timed out.");
 });
@@ -513,9 +511,7 @@ test("skips a silent drop, halts on three AJAX failures, and resumes via Retry",
     }
   }
   const status = top.getByRole("status");
-  await expect(status).toHaveText(
-    "Не удалось загрузить часть комментариев. Можно попробовать ещё раз.",
-  );
+  await expect(status).toHaveText("Ошибка загрузки комментариев.");
   expect(requested).not.toContain("later");
 
   recovered = true;
@@ -853,9 +849,10 @@ test("mirrors controls at the bottom, synchronizes settings, and expands from th
 
   // Toggling Auto-Expand on Visit from bottom controls updates top controls too.
   const bottomCheckbox = await openSettings(page, bottom);
-  const topCheckbox = await openSettings(page, top);
   await bottomCheckbox.check();
+  const topCheckbox = await openSettings(page, top);
   await expect(topCheckbox).toBeChecked();
+  await page.keyboard.press("Escape");
 
   // Starting from the bottom bar completes expansion and keeps bottom bar visible with final counter.
   await bottom.getByRole("button", { name: "Раскрыть все комментарии" }).click();
