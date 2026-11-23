@@ -10,10 +10,19 @@ export function createScrollPreservation(
   let listening: AbortController | undefined;
   let previousStyle: { container: HTMLElement; value: string; priority: string } | undefined;
   let anchor: { element: Element; top: number } | undefined;
+  let pinnedAnchor: { element: Element; top: number } | undefined;
+  let pinnedResizeObserver: ResizeObserver | undefined;
   let resumeAt = 0;
   let scrollY = page.scrollY;
 
+  function clearTargetLock() {
+    pinnedAnchor = undefined;
+    pinnedResizeObserver?.disconnect();
+    pinnedResizeObserver = undefined;
+  }
+
   function yieldToReader() {
+    clearTargetLock();
     anchor = undefined;
     resumeAt = page.performance.now() + manualScrollPauseMs;
   }
@@ -59,7 +68,43 @@ export function createScrollPreservation(
     }
   }
 
+  function compensate() {
+    if (!listening) return;
+    trackScroll();
+    const target = pinnedAnchor ?? anchor;
+    if (!target || !target.element.isConnected || target.element.getClientRects().length === 0) {
+      return;
+    }
+    const offset = target.element.getBoundingClientRect().top - target.top;
+    if (Math.abs(offset) >= 1) {
+      page.scrollBy({ top: offset, behavior: "instant" });
+      // Scroll events also fire for our own instant compensation.
+      scrollY = page.scrollY;
+    }
+  }
+
   return {
+    yieldToReader,
+    clearTargetLock,
+    lockTarget(element: Element) {
+      clearTargetLock();
+      if (!element.isConnected) return;
+      pinnedAnchor = { element, top: element.getBoundingClientRect().top };
+      anchor = pinnedAnchor;
+      scrollY = page.scrollY;
+      if (typeof page.ResizeObserver === "function") {
+        const observed = element.parentElement ?? getContainer();
+        if (observed) {
+          pinnedResizeObserver = new page.ResizeObserver(() => {
+            if (pinnedAnchor) compensate();
+          });
+          pinnedResizeObserver.observe(observed);
+        }
+      }
+    },
+    compensatePinned() {
+      if (pinnedAnchor) compensate();
+    },
     setRunning(running: boolean) {
       if (running) {
         if (!listening) {
@@ -71,20 +116,31 @@ export function createScrollPreservation(
           page.addEventListener("keydown", onKeydown, options);
           page.addEventListener("scroll", trackScroll, { signal: listening.signal });
         }
+        if (pinnedAnchor) anchor = pinnedAnchor;
         syncContainer(getContainer());
-      } else if (listening) {
-        listening.abort();
-        listening = undefined;
-        syncContainer(null);
-        anchor = undefined;
-        resumeAt = 0;
+      } else {
+        clearTargetLock();
+        if (listening) {
+          listening.abort();
+          listening = undefined;
+          syncContainer(null);
+          anchor = undefined;
+          resumeAt = 0;
+        }
       }
     },
 
     capture() {
-      anchor = undefined;
-      if (!listening) return;
+      if (!listening) {
+        anchor = undefined;
+        return;
+      }
       trackScroll();
+      if (pinnedAnchor) {
+        anchor = pinnedAnchor;
+        return;
+      }
+      anchor = undefined;
       if (page.performance.now() < resumeAt) return;
       const container = getContainer();
       if (!container) return;
@@ -108,18 +164,6 @@ export function createScrollPreservation(
       if (element) anchor = { element, top: element.getBoundingClientRect().top };
     },
 
-    compensate() {
-      if (!listening) return;
-      trackScroll();
-      if (!anchor || !anchor.element.isConnected || anchor.element.getClientRects().length === 0) {
-        return;
-      }
-      const offset = anchor.element.getBoundingClientRect().top - anchor.top;
-      if (Math.abs(offset) >= 1) {
-        page.scrollBy({ top: offset, behavior: "instant" });
-        // Scroll events also fire for our own instant compensation.
-        scrollY = page.scrollY;
-      }
-    },
+    compensate,
   };
 }

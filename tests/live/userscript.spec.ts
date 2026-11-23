@@ -3,10 +3,10 @@ import { installUserscript } from "../support/install-userscript.ts";
 
 const postUrl = "https://pikabu.ru/story/poputchik_7957162";
 const loaderClickLimit = 8;
-const visibleCountPattern = /Сейчас видно (\d+)\./;
+const counterPattern = /^(\d+)(?:\s*\/\s*(\d+))?$/;
 
-function visibleCommentCount(status: string | null) {
-  return Number(status?.match(visibleCountPattern)?.[1] ?? 0);
+function visibleCommentCount(counter: string | null) {
+  return Number(counter?.trim().match(counterPattern)?.[1] ?? 0);
 }
 
 test("expands live Pikabu comments, preserves the viewport, and stops and continues", async ({
@@ -20,9 +20,11 @@ test("expands live Pikabu comments, preserves the viewport, and stops and contin
   const comments = page.locator(".comments__container");
   const anchor = comments.locator("#comment_189851078");
   const start = menu.getByRole("button", { name: "Раскрыть все комментарии" });
+  const counter = menu.locator('[data-role="counter"]');
   const status = menu.getByRole("status");
   await expect(start).toBeVisible();
   await expect(anchor).toBeVisible();
+  await expect(counter).toHaveText(/^\d+ \/ \d+$/);
 
   // Observe public DOM clicks and prevent the run from loading the entire discussion,
   // even if a test assertion fails or Pikabu responds faster than expected.
@@ -30,9 +32,9 @@ test("expands live Pikabu comments, preserves the viewport, and stops and contin
     (button, { limit, countPattern }) => {
       const clicks: Array<{ type: "batch" | "branch"; visibleCount: number }> = [];
       const controls = button.getRootNode() as ShadowRoot;
-      const status = controls.querySelector('[role="status"]')!;
+      const counter = controls.querySelector('[data-role="counter"]')!;
       const state = { clicks, stoppedFromViewport: false, runningOverflowAnchor: "" };
-      const readCount = () => Number(status.textContent?.match(countPattern)?.[1] ?? 0);
+      const readCount = () => Number(counter.textContent?.trim().match(countPattern)?.[1] ?? 0);
 
       // The site can hydrate several steps between browser-driver commands.
       // Use the first progress update to activate the floating shortcut in the page.
@@ -42,22 +44,27 @@ test("expands live Pikabu comments, preserves the viewport, and stops and contin
           return;
         }
         stopAfterProgress.disconnect();
-        const shortcut = Array.from(controls.querySelectorAll("button")).find(
-          (candidate) => candidate !== button && candidate.textContent === "Остановить",
-        );
-        const bounds = shortcut?.getBoundingClientRect();
+        const bottomControls = document.querySelector(
+          '[data-pikabu-expand-comments="bottom"]',
+        )?.shadowRoot;
+        const inViewportStopButtons = [
+          ...Array.from(controls.querySelectorAll("button")),
+          ...Array.from(bottomControls?.querySelectorAll("button") ?? []),
+        ].filter((candidate) => {
+          if (candidate === button || candidate.textContent !== "Остановить" || candidate.hidden) {
+            return false;
+          }
+          const bounds = candidate.getBoundingClientRect();
+          return bounds.height > 0 && bounds.top >= 0 && bounds.bottom <= window.innerHeight;
+        });
         state.stoppedFromViewport =
-          button.getBoundingClientRect().bottom <= 0 &&
-          !!bounds &&
-          bounds.height > 0 &&
-          bounds.top >= 0 &&
-          bounds.bottom <= window.innerHeight;
+          button.getBoundingClientRect().bottom <= 0 && inViewportStopButtons.length === 1;
         state.runningOverflowAnchor = getComputedStyle(
           document.querySelector(".comments__container")!,
         ).overflowAnchor;
-        shortcut?.click();
+        inViewportStopButtons[0]?.click();
       });
-      stopAfterProgress.observe(status, { childList: true });
+      stopAfterProgress.observe(counter, { childList: true });
 
       window.addEventListener(
         "click",
@@ -80,7 +87,7 @@ test("expands live Pikabu comments, preserves the viewport, and stops and contin
       );
       return state;
     },
-    { limit: loaderClickLimit, countPattern: visibleCountPattern },
+    { limit: loaderClickLimit, countPattern: counterPattern },
   );
   const readClicks = () => run.evaluate(({ clicks }) => clicks);
   const anchorTop = await anchor.evaluate((comment) => {
@@ -96,13 +103,13 @@ test("expands live Pikabu comments, preserves the viewport, and stops and contin
   await start.evaluate((button) => (button as HTMLButtonElement).click());
 
   const stop = menu.getByRole("button", { name: "Остановить", exact: true });
-  await expect(status).toHaveText(/^Раскрытие остановлено\./);
+  await expect(status).toHaveText("Раскрытие остановлено.");
   const firstRun = await run.jsonValue();
   expect(firstRun.stoppedFromViewport).toBe(true);
   expect(firstRun.runningOverflowAnchor).toBe("none");
   // Stop lets the in-flight click settle, including any intermediate placeholder renders.
   await expect
-    .poll(async () => visibleCommentCount(await status.textContent()))
+    .poll(async () => visibleCommentCount(await counter.textContent()))
     .toBeGreaterThan(firstRun.clicks[0]!.visibleCount);
   await expect(stop).toHaveCount(0);
   await expect(comments).toHaveCSS("overflow-anchor", originalOverflowAnchor);
@@ -120,7 +127,7 @@ test("expands live Pikabu comments, preserves the viewport, and stops and contin
       async () => {
         const batch = (await readClicks()).find(({ type }) => type === "batch");
         if (!batch) return false;
-        return visibleCommentCount(await status.textContent()) > batch.visibleCount;
+        return visibleCommentCount(await counter.textContent()) > batch.visibleCount;
       },
       {
         message: "A live Comment Batch should increase the visible comment count",

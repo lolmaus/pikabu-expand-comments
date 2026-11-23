@@ -52,6 +52,7 @@ test("waits for hydration and prioritizes visible Reply Branches over Comment Ba
   const postPage = createPostPageAdapter(container);
   expect(postPage.read()).toEqual({
     loadedCommentsCount: 3,
+    totalCommentsCount: 10,
     loaders: [branch, onlyHidden, hydrated, batch],
     isHydrating: false,
   });
@@ -70,6 +71,7 @@ test("waits for hydration and prioritizes visible Reply Branches over Comment Ba
   expect(onSettled).toHaveBeenCalledWith("expanded");
   expect(postPage.read()).toEqual({
     loadedCommentsCount: 4,
+    totalCommentsCount: 10,
     loaders: [nextFloor, onlyHidden, hydrated, batch],
     isHydrating: false,
   });
@@ -264,4 +266,45 @@ test("aborts pending Reply Branch hydration without waiting for the timeout", as
 
   signal.abort();
   await expect(expansion).rejects.toMatchObject({ name: "AbortError" });
+});
+
+test("omits totalCommentsCount on the Author tab and reads across multiple author containers", () => {
+  document.body.innerHTML = `
+    <article class="story" data-comments="1710"></article>
+    <section class="story-comments__author">
+      <div class="comments">
+        <div class="comments__container">
+          <div class="comment">Контекст 1</div>
+          <div class="comment">Ответ автора 1</div>
+        </div>
+      </div>
+      <div class="comments">
+        <div class="comments__container">
+          <div class="comment">
+            Ответ автора 2
+            <button class="comment-toggle-children ${collapseClass}">раскрыть ветку</button>
+          </div>
+        </div>
+      </div>
+    </section>
+  `;
+  const firstContainer = document.querySelector<HTMLElement>(".comments__container")!;
+  const postPage = createPostPageAdapter(firstContainer, "author");
+  const snapshot = postPage.read();
+  expect(snapshot.loadedCommentsCount).toBe(3);
+  expect(snapshot.totalCommentsCount).toBeUndefined();
+  expect(snapshot.loaders).toHaveLength(1);
+});
+
+test("falls back to .story__comments-link-count when article.story[data-comments] is absent", () => {
+  document.body.innerHTML = `
+    <span class="story__comments-link-count">42</span>
+    <div class="story-comments__all">
+      <div class="comments__container">
+        <div class="comment">Комментарий</div>
+      </div>
+    </div>
+  `;
+  const container = document.querySelector<HTMLElement>(".comments__container")!;
+  expect(createPostPageAdapter(container, "all").read().totalCommentsCount).toBe(42);
 });

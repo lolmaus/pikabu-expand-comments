@@ -1,4 +1,5 @@
 import type { PostPageAdapter } from "../../core/expansion-run.ts";
+import type { CommentTabKind } from "./comment-view.ts";
 import { createScrollPreservation } from "./scroll-preservation.ts";
 
 const replyBranch = ".comment-toggle-children";
@@ -11,39 +12,85 @@ const placeholder =
 const hidden = `[hidden], ${placeholder}`;
 const hydrationTimeoutMs = 15_000;
 
+function parseCommentCount(value: string | null | undefined) {
+  const normalized = value?.replace(/\s+/g, "").trim();
+  if (!normalized || !/^\d+$/.test(normalized)) return undefined;
+  return Number.parseInt(normalized, 10);
+}
+
+function readTotalCommentsCount(document: Document, tabKind: CommentTabKind) {
+  if (tabKind === "author") return undefined;
+  const fromStory = parseCommentCount(
+    document.querySelector("article.story")?.getAttribute("data-comments"),
+  );
+  if (fromStory !== undefined) return fromStory;
+  return parseCommentCount(document.querySelector(".story__comments-link-count")?.textContent);
+}
+
 export function createPostPageAdapter(
   initialContainer: HTMLElement,
-): PostPageAdapter<HTMLElement> & { setRunning(running: boolean): void } {
-  // Pikabu can replace the comment list while keeping the surrounding view.
+  tabKind: CommentTabKind = "all",
+): PostPageAdapter<HTMLElement> & {
+  setRunning(running: boolean): void;
+  yieldScrollPreservation(): void;
+  lockScrollTarget(element: Element): void;
+  clearScrollTargetLock(): void;
+} {
+  // Pikabu can replace the comment list while keeping the surrounding view,
+  // and renders multiple containers inside `.story-comments__author`.
   const view =
-    initialContainer.closest(".story-comments__all") ??
+    initialContainer.closest(".story-comments__all, .story-comments__author") ??
     initialContainer.parentElement ??
     initialContainer;
   const replyIdentities = new Map<string, object>();
 
-  function currentContainer() {
-    return view === initialContainer
-      ? initialContainer
-      : view.querySelector<HTMLElement>(".comments__container");
+  function currentContainers() {
+    if (view === initialContainer) return [initialContainer];
+    return Array.from(view.querySelectorAll<HTMLElement>(".comments__container"));
   }
+
+  function currentContainer() {
+    return currentContainers()[0] ?? null;
+  }
+
+  function containsInActiveContainers(node: Node) {
+    return currentContainers().some((container) => container.contains(node));
+  }
+
   const scroll = createScrollPreservation(initialContainer.ownerDocument, currentContainer);
 
   function visibleElements(selector: string) {
-    return Array.from(currentContainer()?.querySelectorAll<HTMLElement>(selector) ?? []).filter(
-      (element) => !element.closest(hidden),
+    return currentContainers().flatMap((container) =>
+      Array.from(container.querySelectorAll<HTMLElement>(selector)).filter(
+        (element) => !element.closest(hidden),
+      ),
     );
   }
 
   function isHydrating() {
-    const container = currentContainer();
-    if (!container) return true;
-    return Array.from(container.querySelectorAll(placeholder)).some(
-      (element) => !element.closest("[hidden]"),
+    const containers = currentContainers();
+    if (containers.length === 0) return true;
+    return containers.some((container) =>
+      Array.from(container.querySelectorAll(placeholder)).some(
+        (element) => !element.closest("[hidden]"),
+      ),
     );
   }
 
   function observeChanges(onChange: () => void) {
-    const observer = new MutationObserver(onChange);
+    const observer = new MutationObserver((records) => {
+      if (
+        records.every(
+          (record) =>
+            record.target instanceof Element &&
+            record.target.hasAttribute("data-pikabu-expand-comments"),
+        )
+      ) {
+        return;
+      }
+      scroll.compensatePinned();
+      onChange();
+    });
     observer.observe(view, {
       subtree: true,
       childList: true,
@@ -64,7 +111,7 @@ export function createPostPageAdapter(
         loader instanceof HTMLElement &&
         loader.matches(replyBranch) &&
         !loader.classList.contains(collapseClass) &&
-        currentContainer()?.contains(loader)
+        containsInActiveContainers(loader)
       ) {
         onCollapse(loader);
       }
@@ -130,7 +177,7 @@ export function createPostPageAdapter(
         const collapsed = loader.classList.contains(collapseClass);
         // Collapsing a branch can hide or remove a loading descendant.
         withdrawn =
-          !currentContainer()?.contains(loader) ||
+          !containsInActiveContainers(loader) ||
           loader.parentElement?.closest("[hidden]") != null ||
           (readerClosedBranch && collapsed);
         opened ||= !collapsed;
@@ -145,7 +192,7 @@ export function createPostPageAdapter(
         if (!withdrawn) return !collapsed && hasHydratedReplies();
         // Let any observed in-flight replies finish even if a reader hides them.
         return !Array.from(observedPlaceholders).some(
-          (comment) => currentContainer()?.contains(comment) && comment.matches(placeholder),
+          (comment) => containsInActiveContainers(comment) && comment.matches(placeholder),
         );
       },
       signal,
@@ -182,7 +229,7 @@ export function createPostPageAdapter(
     const settled = await observeUntil(
       () =>
         !isHydrating() &&
-        (!currentContainer()?.contains(loader) ||
+        (!containsInActiveContainers(loader) ||
           Number.parseInt(remainingBatchLabel() ?? "", 10) < previousCount ||
           visibleElements(".comment").some((comment) => !previousComments.has(comment))),
       signal,
@@ -207,6 +254,9 @@ export function createPostPageAdapter(
 
   return {
     setRunning: scroll.setRunning,
+    yieldScrollPreservation: scroll.yieldToReader,
+    lockScrollTarget: scroll.lockTarget,
+    clearScrollTargetLock: scroll.clearTargetLock,
     observeChanges,
     observeManualCollapses,
 
@@ -225,8 +275,10 @@ export function createPostPageAdapter(
     },
 
     read() {
+      const totalCommentsCount = readTotalCommentsCount(initialContainer.ownerDocument, tabKind);
       return {
         loadedCommentsCount: visibleElements(".comment").length,
+        ...(totalCommentsCount === undefined ? {} : { totalCommentsCount }),
         loaders: [
           ...visibleElements(collapsedReplyBranch),
           ...visibleElements(commentBatch),

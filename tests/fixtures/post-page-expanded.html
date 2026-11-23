@@ -5,18 +5,30 @@
     <title>Тестовый пост</title>
   </head>
   <body>
+    <article class="story" data-comments="1">
+      <div class="story__footer">
+        <a class="story__comments-link" href="#comments">
+          <span class="story__comments-link-count">1</span>
+        </a>
+      </div>
+    </article>
     <section class="story-comments__menu section_header">
       <div class="menu menu_horizontal">
-        <a class="menu__item menu__item_current" href="#comments">Все комментарии</a>
-        <a class="menu__item" href="#author">Автора</a>
+        <a class="menu__item menu__item_current" data-id="all" href="#comments">Все комментарии</a>
+        <a class="menu__item" data-id="author" href="#author">Автора</a>
       </div>
     </section>
     <div class="story-comments__all" id="comments">
-      <div class="comments__container">
-        <div class="comment" id="comment_1" data-id="1" data-indent="0">
-          <div class="comment__body">Тестовый комментарий</div>
+      <section class="comments">
+        <div class="comments__container">
+          <div class="comment" id="comment_1" data-id="1" data-indent="0">
+            <div class="comment__body">Тестовый комментарий</div>
+          </div>
         </div>
-      </div>
+      </section>
+      <section data-role="answer" class="section_gray">
+        Чтобы оставить комментарий, необходимо войти
+      </section>
     </div>
   </body>
 </html>

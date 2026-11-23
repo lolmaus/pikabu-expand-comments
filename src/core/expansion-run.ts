@@ -1,5 +1,6 @@
 interface PostPageSnapshot<Loader> {
   loadedCommentsCount: number;
+  totalCommentsCount?: number;
   loaders: readonly Loader[];
   isHydrating: boolean;
 }
@@ -20,6 +21,7 @@ type ExpansionState = "idle" | "running" | "stopped" | "completed" | "error";
 export interface ExpansionSnapshot {
   state: ExpansionState;
   loadedCommentsCount: number;
+  totalCommentsCount?: number;
   expandedStepsCount: number;
   remainingLoadersCount: number;
   skippedCount: number;
@@ -72,6 +74,9 @@ export function createExpansionRun<Loader extends object>(
       expandedStepsCount,
       initiallyEmpty,
       loadedCommentsCount: page.loadedCommentsCount,
+      ...(page.totalCommentsCount === undefined
+        ? {}
+        : { totalCommentsCount: page.totalCommentsCount }),
       remainingLoadersCount: page.loaders.length,
       skippedCount,
     });

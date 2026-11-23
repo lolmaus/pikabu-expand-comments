@@ -36,9 +36,17 @@ async function openPostPage(page: Page, alreadyExpanded = false) {
   await page.goto(postUrl);
 }
 
-async function openSettings(page: Page) {
-  await page.getByRole("button", { name: "Настройки" }).click();
-  return page.getByRole("checkbox", { name: "Раскрывать комментарии при открытии поста" });
+function topControls(page: Page) {
+  return page.locator(".story-comments__menu");
+}
+
+function bottomControls(page: Page) {
+  return page.locator('[data-pikabu-expand-comments="bottom"]');
+}
+
+async function openSettings(page: Page, scope = topControls(page)) {
+  await scope.getByRole("button", { name: "Настройки" }).click();
+  return scope.getByRole("checkbox", { name: "Раскрывать комментарии при открытии поста" });
 }
 
 function setVisibility(visibility: DocumentVisibilityState) {
@@ -61,16 +69,19 @@ test("saves the preference for the next visit and keeps it enabled after Stop", 
   page,
 }) => {
   await openPostPage(page);
+  const top = topControls(page);
   const checkbox = await openSettings(page);
   const storedPreference = () => page.evaluate(() => localStorage.getItem("autoExpandOnVisit"));
-  const status = page.getByRole("status");
-  const start = page.getByRole("button", { name: "Раскрыть все комментарии" });
-  const stop = page.getByRole("button", { name: "Остановить" });
+  const status = top.getByRole("status");
+  const counter = top.locator('[data-role="counter"]');
+  const start = top.getByRole("button", { name: "Раскрыть все комментарии" });
+  const stop = top.getByRole("button", { name: "Остановить" });
 
   await expect(checkbox).not.toBeChecked();
   await checkbox.check();
   await expect.poll(storedPreference).toBe("true");
   await expect(start).toBeVisible();
+  await expect(counter).toHaveText("3 / 10");
 
   const releaseResponse = Promise.withResolvers<void>();
   const requests = await mockCommentLoads(page, releaseResponse.promise);
@@ -87,15 +98,17 @@ test("saves the preference for the next visit and keeps it enabled after Stop", 
     await checkbox.check();
     await expect.poll(storedPreference).toBe("true");
     await stop.click();
-    await expect(status).toHaveText(/Раскрытие остановлено/);
+    await expect(status).toHaveText("Раскрытие остановлено.");
     expect(await storedPreference()).toBe("true");
   } finally {
     releaseResponse.resolve();
   }
 
-  await expect(status).toHaveText("Раскрытие остановлено. Сейчас видно 4.");
+  await expect(status).toHaveText("Раскрытие остановлено.");
+  await expect(counter).toHaveText("4 / 10");
   await page.reload();
   await expect(status).toHaveText("Все комментарии раскрыты.");
+  await expect(counter).toHaveText("10 / 10");
 });
 
 test("waits for both a complete document and a present comments container", async ({ page }) => {
@@ -107,8 +120,9 @@ test("waits for both a complete document and a present comments container", asyn
     await route.fulfill({ status: 204 });
   });
   const requests = await mockCommentLoads(page, Promise.resolve());
+  const top = topControls(page);
   const container = page.locator(".comments__container");
-  const start = page.getByRole("button", { name: "Раскрыть все комментарии" });
+  const start = top.getByRole("button", { name: "Раскрыть все комментарии" });
   let detachedContainer;
   try {
     await page.goto(postUrl, { waitUntil: "domcontentloaded" });
@@ -128,9 +142,9 @@ test("waits for both a complete document and a present comments container", asyn
   await expect(start).toBeVisible();
   expect(requests).toEqual([]);
   await detachedContainer.evaluate((element) =>
-    document.getElementById("comments")!.append(element),
+    document.querySelector("section.comments")!.append(element),
   );
-  await expect(page.getByRole("status")).toHaveText("Все комментарии раскрыты.");
+  await expect(top.getByRole("status")).toHaveText("Все комментарии раскрыты.");
 });
 
 test("defers auto-expansion while hidden and finishes once started", async ({ page }) => {
@@ -139,22 +153,23 @@ test("defers auto-expansion while hidden and finishes once started", async ({ pa
   await page.addInitScript(setVisibility, "hidden" as const);
   const releaseResponse = Promise.withResolvers<void>();
   const requests = await mockCommentLoads(page, releaseResponse.promise);
+  const top = topControls(page);
 
   try {
     await page.goto(postUrl);
     await expect(await openSettings(page)).toBeChecked();
-    await expect(page.getByRole("button", { name: "Раскрыть все комментарии" })).toBeVisible();
+    await expect(top.getByRole("button", { name: "Раскрыть все комментарии" })).toBeVisible();
     expect(requests).toEqual([]);
 
     await page.evaluate(setVisibility, "visible" as const);
     await expect.poll(() => requests).toEqual(["branch"]);
-    await expect(page.getByRole("button", { name: "Остановить" })).toBeVisible();
+    await expect(top.getByRole("button", { name: "Остановить" })).toBeVisible();
     await page.evaluate(setVisibility, "hidden" as const);
   } finally {
     releaseResponse.resolve();
   }
 
-  await expect(page.getByRole("status")).toHaveText("Все комментарии раскрыты.");
+  await expect(top.getByRole("status")).toHaveText("Все комментарии раскрыты.");
 });
 
 test("expands all Reply Branch variants in order before repeated Comment Batches", async ({
@@ -164,11 +179,14 @@ test("expands all Reply Branch variants in order before repeated Comment Batches
   const releaseFirstResponse = Promise.withResolvers<void>();
   const requests = await mockCommentLoads(page, releaseFirstResponse.promise);
 
-  const status = page.getByRole("status");
+  const top = topControls(page);
+  const status = top.getByRole("status");
+  const counter = top.locator('[data-role="counter"]');
   const container = page.locator(".comments__container");
-  await page.getByRole("button", { name: "Раскрыть все комментарии" }).click();
+  await top.getByRole("button", { name: "Раскрыть все комментарии" }).click();
   try {
-    await expect(status).toHaveText("Раскрываем комментарии… Сейчас видно 3.");
+    await expect(status).toHaveText("Раскрываем комментарии…");
+    await expect(counter).toHaveText("3 / 10");
     await expect(container.locator(".comment_loading-hidden")).toHaveCount(1);
     await expect.poll(() => requests).toEqual(["branch"]);
   } finally {
@@ -176,6 +194,7 @@ test("expands all Reply Branch variants in order before repeated Comment Batches
   }
 
   await expect(status).toHaveText("Все комментарии раскрыты.");
+  await expect(counter).toHaveText("10 / 10");
   await expect(container).toHaveAttribute(
     "data-actions",
     "branch next-floor-1 next-floor-2 only-hidden hydrated batch-1 batch-2",
@@ -203,30 +222,35 @@ test("Stop lets the current step settle and Continue respects a branch the reade
   await openPostPage(page);
   const releaseFirstResponse = Promise.withResolvers<void>();
   const requests = await mockCommentLoads(page, releaseFirstResponse.promise);
+  const top = topControls(page);
   const container = page.locator(".comments__container");
   const readerBranch = container.getByRole("button", { name: "раскрыть загруженную ветку (1)" });
-  const status = page.getByRole("status");
+  const status = top.getByRole("status");
+  const counter = top.locator('[data-role="counter"]');
 
   await readerBranch.click();
   await expect(container.getByText("Загруженный ответ")).toBeVisible();
-  await page.getByRole("button", { name: "Раскрыть все комментарии" }).click();
+  await top.getByRole("button", { name: "Раскрыть все комментарии" }).click();
   try {
     await expect.poll(() => requests).toEqual(["branch"]);
     await container.locator("#comment_3 > .comment__children > .comment__collapsing-area").click();
     await expect(container.getByText("Загруженный ответ")).toBeHidden();
-    await page.getByRole("button", { name: "Остановить" }).click();
-    await expect(status).toHaveText("Раскрытие остановлено. Сейчас видно 3.");
-    await expect(page.getByRole("button", { name: "Продолжить" })).toBeVisible();
+    await top.getByRole("button", { name: "Остановить" }).click();
+    await expect(status).toHaveText("Раскрытие остановлено.");
+    await expect(counter).toHaveText("3 / 10");
+    await expect(top.getByRole("button", { name: "Продолжить" })).toBeVisible();
   } finally {
     releaseFirstResponse.resolve();
   }
 
-  await expect(status).toHaveText("Раскрытие остановлено. Сейчас видно 4.");
+  await expect(status).toHaveText("Раскрытие остановлено.");
+  await expect(counter).toHaveText("4 / 10");
   await page.clock.runFor(500);
   expect(requests).toEqual(["branch"]);
 
-  await page.getByRole("button", { name: "Продолжить" }).click();
+  await top.getByRole("button", { name: "Продолжить" }).click();
   await expect(status).toHaveText("Все комментарии раскрыты.");
+  await expect(counter).toHaveText("9 / 10");
   await expect(container.getByText("Загруженный ответ")).toBeHidden();
   await expect(container).toHaveAttribute(
     "data-actions",
@@ -241,11 +265,12 @@ test("continues to the next batch when collapsing a parent removes a loading bra
   await openPostPage(page);
   const releaseResponse = Promise.withResolvers<void>();
   const requests = await mockCommentLoads(page, releaseResponse.promise, "next-floor-1");
+  const top = topControls(page);
   const container = page.locator(".comments__container");
   const readerBranch = container.locator("#comment_1");
   const toggle = readerBranch.locator(":scope > .comment-toggle-children");
 
-  await page.getByRole("button", { name: "Раскрыть все комментарии" }).click();
+  await top.getByRole("button", { name: "Раскрыть все комментарии" }).click();
   try {
     await expect.poll(() => requests).toEqual(["branch", "next-floor-1"]);
     await toggle.evaluate((control) => {
@@ -291,7 +316,7 @@ test("collapsing the only open root leaves hidden placeholders without blocking 
     });
   });
   const rootToggle = container.locator("#comment_1 > .comment-toggle-children");
-  await page.getByRole("button", { name: "Раскрыть все комментарии" }).click();
+  await topControls(page).getByRole("button", { name: "Раскрыть все комментарии" }).click();
   try {
     await expect.poll(() => requests).toEqual(["branch"]);
     await rootToggle.click();
@@ -310,7 +335,9 @@ test("collapsing the only open root leaves hidden placeholders without blocking 
 test("an already-expanded Post Page immediately shows the completed status", async ({ page }) => {
   await openPostPage(page, true);
   await expect(page.getByRole("status")).toHaveText("Все комментарии уже раскрыты.");
+  await expect(topControls(page).locator('[data-role="counter"]')).toHaveText("1 / 1");
   await expect(page.getByRole("button", { name: "Раскрыть все комментарии" })).toBeHidden();
+  await expect(bottomControls(page)).toBeHidden();
 });
 
 test("offers expansion when Pikabu inserts a loader after the controls mount", async ({ page }) => {
@@ -325,7 +352,10 @@ test("offers expansion when Pikabu inserts a loader after the controls mount", a
     container.append(loader);
   });
 
-  await expect(page.getByRole("button", { name: "Раскрыть все комментарии" })).toBeVisible();
+  await expect(
+    topControls(page).getByRole("button", { name: "Раскрыть все комментарии" }),
+  ).toBeVisible();
+  await expect(bottomControls(page)).toBeVisible();
   await expect(page.getByRole("status")).toBeEmpty();
 });
 
@@ -347,8 +377,12 @@ test("finds the batch loader after Pikabu replaces the comment container", async
     });
   });
 
-  await page.getByRole("button", { name: "Раскрыть все комментарии" }).click({ timeout: 2500 });
+  await topControls(page)
+    .getByRole("button", { name: "Раскрыть все комментарии" })
+    .click({ timeout: 2500 });
   await expect(page.getByRole("status")).toHaveText("Все комментарии раскрыты.");
+  // Clamps displayed denominator upward when open comments exceed data-comments="1".
+  await expect(topControls(page).locator('[data-role="counter"]')).toHaveText("2 / 2");
 });
 
 test("reports which loader timed out when showing Retry", async ({ page }) => {
@@ -366,7 +400,7 @@ test("reports which loader timed out when showing Retry", async ({ page }) => {
     predicate: (message) => message.text().startsWith("[Pikabu Expand Comments]"),
   });
 
-  await page.getByRole("button", { name: "Раскрыть все комментарии" }).click();
+  await topControls(page).getByRole("button", { name: "Раскрыть все комментарии" }).click();
   await expect(container).toHaveCSS("overflow-anchor", "none");
   await page.clock.runFor(67_500);
 
@@ -413,7 +447,7 @@ test("retries a stalled AJAX request while its loader stays clickable", async ({
   });
 
   try {
-    await page.getByRole("button", { name: "Раскрыть все комментарии" }).click();
+    await topControls(page).getByRole("button", { name: "Раскрыть все комментарии" }).click();
     await expect.poll(() => requested).toEqual([1]);
     await page.clock.runFor(16_100);
     await expect.poll(() => requested).toEqual([1, 2]);
@@ -464,7 +498,8 @@ test("skips a silent drop, halts on three AJAX failures, and resumes via Retry",
     }
   });
 
-  await page.getByRole("button", { name: "Раскрыть все комментарии" }).evaluate((button) => {
+  const top = topControls(page);
+  await top.getByRole("button", { name: "Раскрыть все комментарии" }).evaluate((button) => {
     (button as HTMLButtonElement).click();
   });
   await expect.poll(() => requested).toEqual(["drop"]);
@@ -477,7 +512,7 @@ test("skips a silent drop, halts on three AJAX failures, and resumes via Retry",
       await page.clock.runFor(interval);
     }
   }
-  const status = page.getByRole("status");
+  const status = top.getByRole("status");
   await expect(status).toHaveText(
     "Не удалось загрузить часть комментариев. Можно попробовать ещё раз.",
   );
@@ -490,7 +525,7 @@ test("skips a silent drop, halts on three AJAX failures, and resumes via Retry",
     replacement.classList.add("comment-toggle-children_collapse");
     button.replaceWith(replacement);
   });
-  const retry = page.getByRole("button", { name: "Повторить" });
+  const retry = top.getByRole("button", { name: "Повторить" });
   await expect(retry).toBeVisible();
   await retry.evaluate((button) => (button as HTMLButtonElement).click());
   for (const id of ["one", "two", "three", "later"]) {
@@ -506,6 +541,7 @@ test("continues after a batch hydrates replies under the same top-level comment"
 }) => {
   await page.clock.install();
   await openPostPage(page, true);
+  const top = topControls(page);
   const container = page.locator(".comments__container");
   await container.evaluate((element) => {
     const root = element.querySelector(".comment")!;
@@ -529,10 +565,11 @@ test("continues after a batch hydrates replies under the same top-level comment"
     );
   });
 
-  await page.getByRole("button", { name: "Раскрыть все комментарии" }).click();
+  await top.getByRole("button", { name: "Раскрыть все комментарии" }).click();
   const reply = container.locator(".comment__children .comment");
   await expect(reply).toHaveClass(/comment_placeholder/);
-  await expect(page.getByRole("status")).toHaveText("Раскрываем комментарии… Сейчас видно 1.");
+  await expect(top.getByRole("status")).toHaveText("Раскрываем комментарии…");
+  await expect(top.locator('[data-role="counter"]')).toHaveText("1 / 1");
   await container.evaluate((element) => {
     const batch = element.querySelector(".comment__more")!;
     batch.addEventListener("click", () => batch.remove(), { once: true });
@@ -589,7 +626,7 @@ test("keeps a permalink comment in view during hydration and restores scroll anc
     window.scrollBy(0, element.getBoundingClientRect().top - 90);
   });
   const originalTop = await top();
-  await page
+  await topControls(page)
     .getByRole("button", { name: "Раскрыть все комментарии" })
     .evaluate((button) => (button as HTMLButtonElement).click());
   await expect(container.locator(".comment_loading-hidden")).toHaveCount(1);
@@ -614,7 +651,7 @@ for (const input of ["wheel", "touch", "keyboard"] as const) {
       // Isolate script compensation from the browser's native scroll anchoring.
       document.documentElement.style.overflowAnchor = "none";
     });
-    await page
+    await topControls(page)
       .getByRole("button", { name: "Раскрыть все комментарии" })
       .evaluate((button) => (button as HTMLButtonElement).click());
     await expect(container.locator(".comment_loading-hidden")).toHaveCount(1);
@@ -654,8 +691,9 @@ test("shows a themed floating Stop at 360px and returns keyboard focus without s
       .menu { display: flex; }
     `,
   });
-  const start = page.getByRole("button", { name: "Раскрыть все комментарии" });
-  const stop = page.getByRole("button", { name: "Остановить", exact: true });
+  const top = topControls(page);
+  const start = top.getByRole("button", { name: "Раскрыть все комментарии" });
+  const topStop = top.getByRole("button", { name: "Остановить", exact: true });
   await expect(start).toHaveCSS("color", "rgb(27, 30, 36)");
   await expect(start).toHaveCSS("background-color", "rgb(247, 248, 252)");
   await expect(await openSettings(page)).toBeVisible();
@@ -663,24 +701,28 @@ test("shows a themed floating Stop at 360px and returns keyboard focus without s
   expect((await start.boundingBox())?.height).toBeGreaterThanOrEqual(44);
 
   await start.click();
-  await expect(stop).toHaveCount(1);
+  await expect(topStop).toHaveCount(1);
   await page.evaluate(() => window.scrollTo(0, 800));
-  await expect(stop).toHaveCount(2);
-  const floatingStop = stop.last();
+  await expect(topStop).toHaveCount(2);
+  const floatingStop = topStop.last();
   await expect(floatingStop).toBeInViewport();
   await expect(floatingStop).toHaveCSS("background-color", "rgb(247, 248, 252)");
   await page.evaluate(() => document.documentElement.setAttribute("data-theme-dark", ""));
   await expect(floatingStop).toHaveCSS("background-color", "rgb(34, 35, 38)");
-  await expect(stop.first()).toHaveCSS("color", "rgb(224, 227, 234)");
+  await expect(topStop.first()).toHaveCSS("color", "rgb(224, 227, 234)");
+
+  // Scrolling all the way to the bottom controls suppresses the floating Stop shortcut.
+  await bottomControls(page).scrollIntoViewIfNeeded();
+  await expect(topStop).toHaveCount(1);
 
   await page.evaluate(() => window.scrollTo(0, 0));
-  await expect(stop).toHaveCount(1);
+  await expect(topStop).toHaveCount(1);
   await page.evaluate(() => window.scrollTo(0, 800));
-  await expect(stop).toHaveCount(2);
+  await expect(topStop).toHaveCount(2);
   await floatingStop.focus();
   await page.keyboard.press("Enter");
-  await expect(stop).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Продолжить" })).toBeFocused();
+  await expect(page.getByRole("button", { name: "Остановить", exact: true })).toHaveCount(0);
+  await expect(top.getByRole("button", { name: "Продолжить" })).toBeFocused();
   expect(await page.evaluate(() => window.scrollY)).toBe(800);
   await expect(container).toHaveCSS("overflow-anchor", "auto");
   await finishScrollScenario(container);
@@ -692,10 +734,11 @@ test("abandons the old Expansion Run when the comment tab URL changes before its
   await openPostPage(page);
   const releaseResponse = Promise.withResolvers<void>();
   const requests = await mockCommentLoads(page, releaseResponse.promise);
+  const top = topControls(page);
   const container = page.locator(".comments__container");
   const oldContainer = await container.elementHandle();
-  const start = page.getByRole("button", { name: "Раскрыть все комментарии" });
-  const status = page.getByRole("status");
+  const start = top.getByRole("button", { name: "Раскрыть все комментарии" });
+  const status = top.getByRole("status");
 
   try {
     await start.click();
@@ -723,6 +766,7 @@ test("abandons the old Expansion Run when the comment tab URL changes before its
       element.outerHTML = '<div class="comments__container"><div class="comment">Автор</div></div>';
     });
     await expect(status).toHaveText("Все комментарии уже раскрыты.");
+    await expect(top.locator('[data-role="counter"]')).toHaveText("1");
     await expect(status).toHaveCount(1);
     await expect(start).toHaveCount(0);
   } finally {
@@ -744,11 +788,12 @@ test("rechecks Auto-Expand on Visit for the new comment tab and waits until visi
   page,
 }) => {
   await openPostPage(page, true);
+  const top = topControls(page);
   const checkbox = await openSettings(page);
   await checkbox.check();
   const storedPreference = () => page.evaluate(() => localStorage.getItem("autoExpandOnVisit"));
   await expect.poll(storedPreference).toBe("true");
-  await expect(page.getByRole("status")).toHaveText("Все комментарии уже раскрыты.");
+  await expect(top.getByRole("status")).toHaveText("Все комментарии уже раскрыты.");
 
   await page.evaluate(setVisibility, "hidden" as const);
   const authorTab = page.getByRole("link", { name: "Автора" });
@@ -769,13 +814,166 @@ test("rechecks Auto-Expand on Visit for the new comment tab and waits until visi
     });
   });
   await authorTab.click();
-  await expect(page.getByRole("button", { name: "Раскрыть все комментарии" })).toBeVisible();
+  await expect(top.getByRole("button", { name: "Раскрыть все комментарии" })).toBeVisible();
   await expect(page.locator(".comment__more")).toBeVisible();
 
   await page.evaluate(setVisibility, "visible" as const);
-  const status = page.getByRole("status");
+  const status = top.getByRole("status");
   await expect(status).toHaveText("Все комментарии раскрыты.");
+  await expect(top.locator('[data-role="counter"]')).toHaveText("1");
   await expect(status).toHaveCount(1);
   await expect(await openSettings(page)).toBeChecked();
   expect(await storedPreference()).toBe("true");
+});
+
+test("mirrors controls at the bottom, synchronizes settings, and expands from the bottom bar", async ({
+  page,
+}) => {
+  await openPostPage(page);
+  await mockCommentLoads(page, Promise.resolve());
+  const top = topControls(page);
+  const bottom = bottomControls(page);
+
+  await expect(bottom).toBeVisible();
+  await expect(bottom.locator('[data-role="counter"]')).toHaveText("3 / 10");
+  await expect(bottom.locator('[data-role="scroll-to-bottom"]')).toHaveCount(0);
+
+  // Mounted inside section.comments directly after .comments__container and above section[data-role="answer"].
+  expect(
+    await bottom.evaluate((host) => ({
+      parentTag: host.parentElement?.tagName.toLowerCase(),
+      parentClass: host.parentElement?.className,
+      previousClass: host.previousElementSibling?.className,
+    })),
+  ).toEqual({
+    parentTag: "section",
+    parentClass: "comments",
+    previousClass: "comments__container",
+  });
+
+  // Toggling Auto-Expand on Visit from bottom controls updates top controls too.
+  const bottomCheckbox = await openSettings(page, bottom);
+  const topCheckbox = await openSettings(page, top);
+  await bottomCheckbox.check();
+  await expect(topCheckbox).toBeChecked();
+
+  // Starting from the bottom bar completes expansion and keeps bottom bar visible with final counter.
+  await bottom.getByRole("button", { name: "Раскрыть все комментарии" }).click();
+  await expect(bottom.locator('[data-role="status"]')).toHaveText("Все комментарии раскрыты.");
+  await expect(bottom.locator('[data-role="counter"]')).toHaveText("10 / 10");
+  await expect(bottom.getByRole("button", { name: "Раскрыть все комментарии" })).toBeHidden();
+});
+
+test("top-bar scroll-to-bottom centers the answer section without focusing and coexists with Expansion Run", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const container = await openScrollablePost(page);
+  await page.locator('section[data-role="answer"]').evaluate((section) => {
+    section.innerHTML = '<textarea id="new-comment-input" rows="4"></textarea>';
+    section.insertAdjacentHTML("afterend", '<div style="height: 1500px"></div>');
+  });
+
+  const top = topControls(page);
+  const scrollButton = top.locator('[data-role="scroll-to-bottom"]');
+  await expect(scrollButton).toBeVisible();
+
+  // Start an active Expansion Run (blocked on hydration) and jump to bottom while running.
+  await top.getByRole("button", { name: "Раскрыть все комментарии" }).click();
+  await expect(container.locator(".comment_loading-hidden")).toHaveCount(1);
+
+  await scrollButton.click();
+  const answerCenterDelta = await page.locator('section[data-role="answer"]').evaluate((el) => {
+    const rect = el.getBoundingClientRect();
+    return Math.abs(rect.top + rect.height / 2 - window.innerHeight / 2);
+  });
+  expect(answerCenterDelta).toBeLessThan(20);
+  // Scroll-only: must not focus the comment textarea or stop the active Expansion Run.
+  expect(await page.evaluate(() => document.activeElement?.id ?? "")).not.toBe("new-comment-input");
+  await expect(top.getByRole("button", { name: "Остановить" }).first()).toBeVisible();
+
+  // Finishing hydration keeps the reader near the bottom rather than snapping back to the top.
+  const scrollBeforeHydration = await page.evaluate(() => window.scrollY);
+  await finishScrollScenario(container);
+  await expect(top.getByRole("status")).toHaveText("Все комментарии раскрыты.");
+  expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(scrollBeforeHydration - 50);
+
+  // Removing section[data-role="answer"] falls back to scrolling to the bottom of the comments section.
+  await page.locator('section[data-role="answer"]').evaluate((el) => el.remove());
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await scrollButton.click();
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(1000);
+});
+
+test("locks scroll onto the bottom controls when started from the bottom and unlocks on user scroll", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await preparePostPage(page, true);
+  await page.goto(postUrl);
+
+  const container = page.locator(".comments__container");
+  const bottom = bottomControls(page);
+  await container.evaluate((element) => {
+    // Give the page room above and below comments so scroll locking is unconstrained.
+    element.insertAdjacentHTML("beforebegin", '<div style="height: 1200px"></div>');
+    element.parentElement!.insertAdjacentHTML("afterend", '<div style="height: 1200px"></div>');
+    element.insertAdjacentHTML(
+      "beforeend",
+      '<button class="comment__more">Раскрыть <span class="comments__more-count">2 комментария</span></button>',
+    );
+    let step = 0;
+    const batch = element.querySelector<HTMLButtonElement>(".comment__more")!;
+    batch.addEventListener("click", () => {
+      step += 1;
+      batch.insertAdjacentHTML(
+        "beforebegin",
+        `<div class="comment comment_loading-hidden" data-step="${step}"></div>`,
+      );
+    });
+  });
+
+  // Scroll the bottom controls into the middle of the viewport and start from the bottom bar.
+  await bottom.evaluate((el) => {
+    window.scrollBy({ top: el.getBoundingClientRect().top - 450, behavior: "instant" });
+  });
+  const lockedTop = await bottom.evaluate((el) => el.getBoundingClientRect().top);
+  const initialScrollY = await page.evaluate(() => window.scrollY);
+
+  await bottom.getByRole("button", { name: "Раскрыть все комментарии" }).click();
+  await expect(container.locator('[data-step="1"]')).toHaveCount(1);
+
+  // Hydrate step 1 with a tall block of comments above the bottom controls.
+  await container.evaluate((element) => {
+    const first = element.querySelector<HTMLElement>('[data-step="1"]')!;
+    first.style.height = "900px";
+    first.classList.remove("comment_loading-hidden");
+    element.querySelector(".comments__more-count")!.textContent = "1 комментарий";
+  });
+
+  // Scroll should advance by ~900px so the bottom controls stay locked in the viewport.
+  await expect(container.locator('[data-step="2"]')).toHaveCount(1);
+  expect(await bottom.evaluate((el) => el.getBoundingClientRect().top)).toBeCloseTo(lockedTop, 0);
+  expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(initialScrollY + 800);
+
+  // Now the user scrolls up manually during step 2; chasing must stop immediately.
+  const beforeWheelScrollY = await page.evaluate(() => window.scrollY);
+  await page.mouse.move(400, 400);
+  await page.mouse.wheel(0, -500);
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(beforeWheelScrollY - 500);
+  const userScrollY = await page.evaluate(() => window.scrollY);
+
+  // Finish step 2 with another tall block of comments; viewport must stay at userScrollY.
+  await container.evaluate((element) => {
+    const second = element.querySelector<HTMLElement>('[data-step="2"]')!;
+    second.style.height = "900px";
+    second.classList.remove("comment_loading-hidden");
+    element.querySelector(".comment__more")!.remove();
+  });
+
+  await expect(topControls(page).getByRole("status")).toHaveText("Все комментарии раскрыты.");
+  expect(await page.evaluate(() => window.scrollY)).toBe(userScrollY);
+  expect(await bottom.evaluate((el) => el.getBoundingClientRect().top)).toBeGreaterThan(
+    lockedTop + 500,
+  );
 });

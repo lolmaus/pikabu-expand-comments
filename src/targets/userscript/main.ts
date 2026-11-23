@@ -1,4 +1,8 @@
-import { observeCommentView } from "../../adapters/pikabu/comment-view.ts";
+import {
+  findScrollToBottomTarget,
+  mountBottomHost,
+  observeCommentView,
+} from "../../adapters/pikabu/comment-view.ts";
 import { createPostPageAdapter } from "../../adapters/pikabu/post-page.ts";
 import { createExpansionRun } from "../../core/expansion-run.ts";
 import { createSettings } from "../../core/settings.ts";
@@ -31,11 +35,26 @@ function watchPostPage(page: Window) {
         console.warn("[Pikabu Expand Comments] Could not read Auto-Expand on Visit.", error);
         return false;
       });
+    let bottomHost: HTMLElement | undefined;
+    let isRunning = false;
+    const postPage = createPostPageAdapter(view.container, view.tabKind);
     const render = mountExpansionControl(
       view.menu,
       {
         start,
         stop: () => run.stop(),
+        scrollToBottom() {
+          const target = findScrollToBottomTarget(page.document, page, view, bottomHost);
+          if (!target) return;
+          if (isRunning) postPage.yieldScrollPreservation();
+          const reducedMotion = Boolean(
+            page.matchMedia?.("(prefers-reduced-motion: reduce)").matches,
+          );
+          target.element.scrollIntoView({
+            block: target.block,
+            behavior: isRunning || reducedMotion ? "instant" : "smooth",
+          });
+        },
         saveAutoExpandOnVisit(enabled) {
           pendingSave = pendingSave
             .then(() => settings.setAutoExpandOnVisit(enabled))
@@ -54,13 +73,17 @@ function watchPostPage(page: Window) {
       },
       savedPreference,
       signal,
+      (host) => {
+        bottomHost = host;
+        mountBottomHost(view, host);
+      },
     );
-    const postPage = createPostPageAdapter(view.container);
     const run = createExpansionRun(
       postPage,
       (milliseconds) => pause(milliseconds, signal),
       (snapshot) => {
-        postPage.setRunning(snapshot.state === "running");
+        isRunning = snapshot.state === "running";
+        postPage.setRunning(isRunning);
         render(snapshot);
       },
       (error) => {
@@ -79,9 +102,14 @@ function watchPostPage(page: Window) {
       { once: true },
     );
 
-    function start() {
+    function start(source?: "top" | "bottom") {
       // A manual start consumes the automatic start for this comment view too.
       startup.abort();
+      if (source === "bottom" && bottomHost) {
+        postPage.lockScrollTarget(bottomHost);
+      } else {
+        postPage.clearScrollTargetLock();
+      }
       void run.start();
     }
 

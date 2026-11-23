@@ -1,5 +1,5 @@
 import { expect, test, vi } from "vitest";
-import { observeCommentView } from "./comment-view.ts";
+import { findScrollToBottomTarget, mountBottomHost, observeCommentView } from "./comment-view.ts";
 
 test("observes the selected tab and replacement menu or comment list", async () => {
   document.body.innerHTML = `
@@ -74,4 +74,83 @@ test("waits for an in-place comment list replacement and a hidden tab spinner", 
     stop();
     history.replaceState(null, "", initialUrl);
   }
+});
+
+test("skips a hidden all-comments container on direct SSR Author pages and resolves bottom/scroll targets", () => {
+  document.body.innerHTML = `
+    <section class="story-comments__menu">
+      <a data-id="all" href="/story/example#comments">Все комментарии</a>
+      <a data-id="author" class="menu__item_current" href="/story/example/author#comments">Автора</a>
+    </section>
+    <div class="story-comments__all" style="display: none">
+      <section class="comments">
+        <div class="comments__container"></div>
+      </section>
+      <section data-role="answer">Hidden answer form</section>
+    </div>
+    <section class="story-comments__author">
+      <div class="comments">
+        <div class="comments__container" id="author-first">
+          <div class="comment">Первый комментарий автора</div>
+        </div>
+      </div>
+      <div class="comments">
+        <div class="comments__container" id="author-second">
+          <div class="comment" id="author-last">Последний комментарий автора</div>
+        </div>
+      </div>
+    </section>
+  `;
+  const changed = vi.fn();
+  const stop = observeCommentView(window, changed);
+  try {
+    const view = changed.mock.calls.at(-1)?.[0];
+    expect(view).toMatchObject({
+      tabKind: "author",
+      container: document.querySelector("#author-first"),
+    });
+
+    const bottomHost = document.createElement("div");
+    mountBottomHost(view, bottomHost);
+    expect(document.querySelector(".story-comments__author")?.lastElementChild).toBe(bottomHost);
+
+    // Hidden answer section in `.story-comments__all` must be skipped in favor of visible bottom host.
+    expect(findScrollToBottomTarget(document, window, view, bottomHost)).toEqual({
+      element: bottomHost,
+      block: "center",
+    });
+
+    // When bottom controls are hidden, fall back to the last visible comment.
+    bottomHost.hidden = true;
+    expect(findScrollToBottomTarget(document, window, view, bottomHost)).toEqual({
+      element: document.querySelector("#author-last"),
+      block: "end",
+    });
+  } finally {
+    stop();
+  }
+});
+
+test("mounts bottom controls inside section.comments after .comments__container and targets visible answer section", () => {
+  document.body.innerHTML = `
+    <div class="story-comments__all">
+      <section class="comments">
+        <div class="comments__container">
+          <div class="comment">Комментарий</div>
+        </div>
+      </section>
+      <section data-role="answer">Форма ответа</section>
+    </div>
+  `;
+  const container = document.querySelector<HTMLElement>(".comments__container")!;
+  const view = { container, tabKind: "all" as const };
+  const bottomHost = document.createElement("div");
+  mountBottomHost(view, bottomHost);
+
+  expect(document.querySelector("section.comments")?.lastElementChild).toBe(bottomHost);
+  expect(container.nextElementSibling).toBe(bottomHost);
+  expect(findScrollToBottomTarget(document, window, view, bottomHost)).toEqual({
+    element: document.querySelector('section[data-role="answer"]'),
+    block: "center",
+  });
 });
