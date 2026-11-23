@@ -4,13 +4,19 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "prepare": "lefthook install",
+    "prepare": "node -e \"if (require('node:fs').existsSync('.git')) require('node:child_process').execFileSync('lefthook', ['install'], { stdio: 'inherit' })\"",
     "lint": "oxlint .",
     "lint:fix": "oxlint --fix .",
     "format": "oxfmt --check .",
     "format:fix": "oxfmt --write .",
     "typecheck": "tsc --project tsconfig.node.json && tsc --project tsconfig.browser.json && tsc --project tsconfig.vitest.json && tsc --project tsconfig.playwright.json",
     "build": "node lib/build.mts",
+    "build:userscript": "node lib/build.mts --target=userscript",
+    "build:chrome": "node lib/build.mts --target=chrome",
+    "build:firefox": "node lib/build.mts --target=firefox",
+    "build:source": "node lib/build.mts --target=source",
+    "lint:firefox": "pnpm run build:firefox && web-ext lint --source-dir dist/firefox --warnings-as-errors",
+    "store:screenshots": "pnpm run build && node scripts/capture-store-screenshots.mts",
     "test": "vitest run",
     "test:e2e": "pnpm run build && playwright test",
     "test:live": "pnpm run build && playwright test --config playwright.live.config.mts",
@@ -29,7 +35,8 @@
     "oxlint": "1.94.0",
     "typescript": "7.0.2",
     "vite": "^8.3.8",
-    "vitest": "5.1.1"
+    "vitest": "5.1.1",
+    "web-ext": "^10.8.0"
   },
   "devEngines": {
     "packageManager": {

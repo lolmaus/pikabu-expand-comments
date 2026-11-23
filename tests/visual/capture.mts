@@ -2,18 +2,22 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium, type Locator, type Page } from "@playwright/test";
+import { discoverExtensionId, launchChromeExtensionContext } from "../support/extension.ts";
 import {
   ALL_VISUAL_VIEWPORTS,
   VISUAL_POST_URL,
   VISUAL_THEMES,
+  VISUAL_VIEWPORTS,
   assertLightDarkTokenParity,
   auditCurrentState,
   auditMobileState,
+  auditPopupState,
   evaluateMobileP0Gates,
   measureTabBar,
   preparePikabuVisualPage,
   resetCls,
   type MobileAuditReport,
+  type PopupAuditReport,
   type StateAuditMetrics,
   type TabBarSnapshot,
   type VisualTheme,
@@ -347,21 +351,92 @@ async function main() {
       }
     }
 
-    const allP0Failures = combos.flatMap((combo) =>
-      combo.states.flatMap((state) => {
-        const failures = [
-          ...state.p0.failures,
-          ...(state.mobile ? evaluateMobileP0Gates(state.mobile) : []),
-        ];
-        return failures.map((f) => ({
-          theme: combo.theme,
-          viewport: combo.viewport.name,
-          state: state.state,
+    const popupReports: PopupAuditReport[] = [];
+    const popupScreenshots: string[] = [];
+    for (const profile of [
+      { name: "desktop-320", width: 320, height: 320, isMobile: false },
+      { name: "mobile-360", width: 360, height: 360, isMobile: true },
+    ] as const) {
+      const ext = await launchChromeExtensionContext({
+        hasTouch: profile.isMobile,
+        isMobile: profile.isMobile,
+        viewport: { width: profile.width, height: profile.height },
+      });
+      try {
+        const postPage = ext.context.pages()[0] ?? (await ext.context.newPage());
+        await preparePikabuVisualPage(postPage, {
+          theme: "light",
+          viewport: VISUAL_VIEWPORTS[0]!,
+          withUserscript: false,
+        });
+        const extId = await discoverExtensionId(ext.context, postPage, VISUAL_POST_URL);
+        const popupPage = await ext.context.newPage();
+        await popupPage.setViewportSize({ width: profile.width, height: profile.height });
+        await popupPage.goto(`chrome-extension://${extId}/popup.html`);
+
+        for (const theme of VISUAL_THEMES) {
+          const dirName = `popup-${theme}-${profile.name}`;
+          const dir = join(outputRoot, dirName);
+          mkdirSync(dir, { recursive: true });
+          await popupPage.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
+
+          await postPage.bringToFront();
+          await popupPage.evaluate(() => location.reload());
+          await popupPage.locator("#active-card").waitFor({ state: "visible" });
+          popupReports.push(
+            await auditPopupState(popupPage, {
+              state: `${profile.name}-on-post`,
+              theme,
+              isMobile: profile.isMobile,
+            }),
+          );
+          await popupPage.screenshot({ path: join(dir, "01-on-post.png") });
+          popupScreenshots.push(`${dirName}/01-on-post.png`);
+
+          await popupPage.bringToFront();
+          await popupPage.reload();
+          await popupPage.locator("#offsite-card").waitFor({ state: "visible" });
+          popupReports.push(
+            await auditPopupState(popupPage, {
+              state: `${profile.name}-off-site`,
+              theme,
+              isMobile: profile.isMobile,
+            }),
+          );
+          await popupPage.screenshot({ path: join(dir, "02-off-site.png") });
+          popupScreenshots.push(`${dirName}/02-off-site.png`);
+        }
+      } finally {
+        await ext.close();
+      }
+    }
+
+    const allP0Failures = [
+      ...combos.flatMap((combo) =>
+        combo.states.flatMap((state) => {
+          const failures = [
+            ...state.p0.failures,
+            ...(state.mobile ? evaluateMobileP0Gates(state.mobile) : []),
+          ];
+          return failures.map((f) => ({
+            theme: combo.theme,
+            viewport: combo.viewport.name,
+            state: state.state,
+            gate: f.gate,
+            message: f.message,
+          }));
+        }),
+      ),
+      ...popupReports.flatMap((report) =>
+        report.p0.failures.map((f) => ({
+          theme: report.theme,
+          viewport: `popup-${report.width}`,
+          state: report.state,
           gate: f.gate,
           message: f.message,
-        }));
-      }),
-    );
+        })),
+      ),
+    ];
 
     const metrics = {
       generatedAt: new Date().toISOString(),
@@ -373,12 +448,14 @@ async function main() {
         failures: allP0Failures,
       },
       combos,
+      popup: { reports: popupReports, screenshots: popupScreenshots },
     };
 
     const metricsPath = join(outputRoot, "metrics.json");
     writeFileSync(metricsPath, `${JSON.stringify(metrics, null, 2)}\n`, "utf8");
 
-    const screenshotCount = combos.reduce((sum, combo) => sum + combo.screenshots.length, 0);
+    const screenshotCount =
+      combos.reduce((sum, combo) => sum + combo.screenshots.length, 0) + popupScreenshots.length;
     console.log(
       `Captured ${screenshotCount} screenshots and metrics.json in tmp/visual-review/ (${allP0Failures.length} P0 findings).`,
     );

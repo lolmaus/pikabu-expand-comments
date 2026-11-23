@@ -1,9 +1,10 @@
 export interface StoragePort {
   get(key: string): Promise<unknown>;
   set(key: string, value: boolean): Promise<void>;
+  subscribe?(key: string, onChange: (value: unknown) => void): () => void;
 }
 
-const autoExpandOnVisitKey = "autoExpandOnVisit";
+export const autoExpandOnVisitKey = "autoExpandOnVisit";
 
 export function createSettings(storage: StoragePort) {
   return {
@@ -12,6 +13,12 @@ export function createSettings(storage: StoragePort) {
     },
     setAutoExpandOnVisit(enabled: boolean) {
       return storage.set(autoExpandOnVisitKey, enabled);
+    },
+    subscribeAutoExpandOnVisit(onChange: (enabled: boolean) => void) {
+      if (!storage.subscribe) return () => {};
+      return storage.subscribe(autoExpandOnVisitKey, (value) => {
+        onChange(value === true);
+      });
     },
   };
 }

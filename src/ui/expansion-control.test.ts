@@ -416,3 +416,46 @@ test("renders mobile companion strip after the menu, switches status to alert on
   expect(bottomGear.getAttribute("aria-expanded")).toBe("false");
   expect(bottomShadow.activeElement).toBe(bottomGear);
 });
+
+test("live-syncs top and bottom settings checkboxes from external Auto-Expand storage updates and unsubscribes on abort", async () => {
+  document.body.innerHTML = '<section class="story-comments__menu"></section>';
+  const menu = document.querySelector<HTMLElement>(".story-comments__menu")!;
+  const abortController = new AbortController();
+  let emitExternal: ((enabled: boolean) => void) | undefined;
+  const unsubscribe = vi.fn();
+  let bottomHost: HTMLElement | undefined;
+
+  mountExpansionControl(
+    menu,
+    { start: vi.fn(), stop: vi.fn(), saveAutoExpandOnVisit: vi.fn().mockResolvedValue(true) },
+    Promise.resolve(false),
+    abortController.signal,
+    (host) => {
+      bottomHost = host;
+      document.body.append(host);
+    },
+    {
+      subscribeAutoExpandOnVisit(onChange) {
+        emitExternal = onChange;
+        return unsubscribe;
+      },
+    },
+  );
+
+  await Promise.resolve();
+  const topBox = menu
+    .querySelector<HTMLElement>('[data-pikabu-expand-comments="top"]')!
+    .shadowRoot!.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+  const bottomBox =
+    bottomHost!.shadowRoot!.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+
+  expect(topBox.checked).toBe(false);
+  expect(bottomBox.checked).toBe(false);
+
+  emitExternal?.(true);
+  expect(topBox.checked).toBe(true);
+  expect(bottomBox.checked).toBe(true);
+
+  abortController.abort();
+  expect(unsubscribe).toHaveBeenCalledOnce();
+});

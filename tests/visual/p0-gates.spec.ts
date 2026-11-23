@@ -1,11 +1,14 @@
 import { expect, test } from "@playwright/test";
+import { discoverExtensionId, launchChromeExtensionContext } from "../support/extension.ts";
 import {
   ALL_VISUAL_VIEWPORTS,
   VISUAL_POST_URL,
   VISUAL_THEMES,
+  VISUAL_VIEWPORTS,
   assertLightDarkTokenParity,
   auditCurrentState,
   auditMobileState,
+  auditPopupState,
   evaluateMobileP0Gates,
   measureTabBar,
   preparePikabuVisualPage,
@@ -220,6 +223,102 @@ for (const viewport of ALL_VISUAL_VIEWPORTS) {
         }
       }
       expect(assertLightDarkTokenParity(tokensByTheme.light!, tokensByTheme.dark!)).toEqual([]);
+    });
+  });
+}
+
+const POPUP_PROFILES = [
+  { name: "desktop-320", width: 320, height: 320, isMobile: false },
+  { name: "mobile-360", width: 360, height: 360, isMobile: true },
+] as const;
+
+for (const profile of POPUP_PROFILES) {
+  test.describe(`Strict P0 popup visual-audit gates (${profile.name})`, () => {
+    test("passes axe-core, overflow, contrast, touch-target, theme-parity, and keyboard toggle gates in light and dark themes", async () => {
+      const ext = await launchChromeExtensionContext({
+        hasTouch: profile.isMobile,
+        isMobile: profile.isMobile,
+        viewport: { width: profile.width, height: profile.height },
+      });
+      try {
+        const postPage = ext.context.pages()[0] ?? (await ext.context.newPage());
+        await preparePikabuVisualPage(postPage, {
+          theme: "light",
+          viewport: VISUAL_VIEWPORTS[0]!,
+          withUserscript: false,
+        });
+        const extensionId = await discoverExtensionId(ext.context, postPage, VISUAL_POST_URL);
+
+        const popupPage = await ext.context.newPage();
+        await popupPage.setViewportSize({ width: profile.width, height: profile.height });
+        await popupPage.goto(`chrome-extension://${extensionId}/popup.html`);
+
+        const themeColors: Record<string, { bg: string; color: string }> = {};
+        const failures: string[] = [];
+
+        for (const theme of VISUAL_THEMES) {
+          await popupPage.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
+
+          // 1. On-post active state (unchecked switch + checked switch for WCAG 1.4.11 track/thumb contrast)
+          await postPage.bringToFront();
+          await popupPage.evaluate(() => location.reload());
+          await expect(popupPage.locator("#active-card")).toBeVisible();
+          const onPost = await auditPopupState(popupPage, {
+            state: "on-post",
+            theme,
+            isMobile: profile.isMobile,
+          });
+          themeColors[theme] = { bg: onPost.bodyBackground, color: onPost.bodyColor };
+          for (const f of onPost.p0.failures) {
+            failures.push(`[popup ${profile.name} ${theme} on-post] (${f.gate}) ${f.message}`);
+          }
+
+          const switchInput = popupPage.getByRole("switch");
+          await switchInput.evaluate((el) => (el as HTMLInputElement).click());
+          await expect(switchInput).toBeChecked();
+          const onPostChecked = await auditPopupState(popupPage, {
+            state: "on-post-checked",
+            theme,
+            isMobile: profile.isMobile,
+          });
+          for (const f of onPostChecked.p0.failures) {
+            failures.push(
+              `[popup ${profile.name} ${theme} on-post-checked] (${f.gate}) ${f.message}`,
+            );
+          }
+          await switchInput.evaluate((el) => (el as HTMLInputElement).click());
+          await expect(switchInput).not.toBeChecked();
+
+          // 2. Off-site fallback state (popup itself active => chrome-extension:// tab has no content script)
+          await popupPage.bringToFront();
+          await popupPage.reload();
+          await expect(popupPage.locator("#offsite-card")).toBeVisible();
+          const offSite = await auditPopupState(popupPage, {
+            state: "off-site",
+            theme,
+            isMobile: profile.isMobile,
+          });
+          for (const f of offSite.p0.failures) {
+            failures.push(`[popup ${profile.name} ${theme} off-site] (${f.gate}) ${f.message}`);
+          }
+        }
+
+        // Verify distinct light and dark computed colors.
+        expect(themeColors["light"]?.bg).not.toBe(themeColors["dark"]?.bg);
+        expect(themeColors["light"]?.color).not.toBe(themeColors["dark"]?.color);
+
+        // Keyboard Tab + Space toggles switch and persists to chrome.storage.local.
+        const toggle = popupPage.getByRole("switch");
+        await toggle.focus();
+        await popupPage.keyboard.press("Space");
+        await expect(toggle).toBeChecked();
+        await popupPage.reload();
+        await expect(toggle).toBeChecked();
+
+        expect(failures, `Popup P0 failures (${profile.name})`).toEqual([]);
+      } finally {
+        await ext.close();
+      }
     });
   });
 }

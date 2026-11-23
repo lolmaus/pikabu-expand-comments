@@ -1,0 +1,102 @@
+{
+  "extensionName": {
+    "message": "Pikabu Expand Comments",
+    "description": "Название расширения в каталогах и панели браузера."
+  },
+  "extensionDescription": {
+    "message": "Раскрывает все комментарии и вложенные ветки на страницах постов Pikabu.ru в один клик или автоматически при открытии.",
+    "description": "Краткое описание расширения для каталогов браузеров."
+  },
+  "actionTitle": {
+    "message": "Pikabu Expand Comments",
+    "description": "Подсказка кнопки расширения на панели браузера."
+  },
+  "popupExpandAll": {
+    "message": "Раскрыть все комментарии"
+  },
+  "popupStop": {
+    "message": "Остановить"
+  },
+  "popupContinue": {
+    "message": "Продолжить"
+  },
+  "popupRetry": {
+    "message": "Повторить"
+  },
+  "popupStatusIdle": {
+    "message": "Комментарии поста"
+  },
+  "popupStatusRunning": {
+    "message": "Раскрываем комментарии…"
+  },
+  "popupStatusStopped": {
+    "message": "Раскрытие остановлено."
+  },
+  "popupStatusError": {
+    "message": "Ошибка загрузки комментариев."
+  },
+  "popupStatusCompletedAll": {
+    "message": "Все комментарии раскрыты."
+  },
+  "popupStatusAlreadyExpanded": {
+    "message": "Все комментарии уже раскрыты."
+  },
+  "popupStatusSkippedOne": {
+    "message": "Одну ветку не удалось раскрыть."
+  },
+  "popupStatusSkippedOneCount": {
+    "message": "Не удалось раскрыть $COUNT$ ветку.",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "popupStatusSkippedFew": {
+    "message": "Не удалось раскрыть $COUNT$ ветки.",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "popupStatusSkippedMany": {
+    "message": "Не удалось раскрыть $COUNT$ веток.",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "popupOffSiteHint": {
+    "message": "Работает на страницах постов Pikabu.ru (pikabu.ru/story/…)."
+  },
+  "popupOpenPikabu": {
+    "message": "Открыть Пикабу"
+  },
+  "popupAutoExpandTitle": {
+    "message": "Раскрывать при открытии поста"
+  },
+  "popupAutoExpandDesc": {
+    "message": "Автоматически запускать раскрытие комментариев"
+  },
+  "popupCounterAriaLabel": {
+    "message": "Открыто комментариев: $OPEN$ из $TOTAL$",
+    "placeholders": {
+      "open": {
+        "content": "$1"
+      },
+      "total": {
+        "content": "$2"
+      }
+    }
+  },
+  "popupCounterOpenOnlyAriaLabel": {
+    "message": "Открыто комментариев: $OPEN$",
+    "placeholders": {
+      "open": {
+        "content": "$1"
+      }
+    }
+  }
+}
