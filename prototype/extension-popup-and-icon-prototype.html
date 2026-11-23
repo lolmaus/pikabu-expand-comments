@@ -1,0 +1,1358 @@
+<!doctype html>
+<!--
+  PROTOTYPE — Throwaway interactive UI prototype for Wayfinder Ticket #34 (Round 2 — Critic-refined)
+  "Three structurally distinct variants of the extension toolbar popup (A: Clean Utility Card,
+   B: Context-Aware Compact Sheet, C: Quick-Action + Setting Split) and three original extension
+   icon concepts with dedicated 16/32px toolbar & 128px CWS optical masters,
+   switchable via ?variant=A|B|C and a floating bottom bar."
+-->
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#fcfdff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#292a2e" media="(prefers-color-scheme: dark)" />
+    <title>Prototype — Extension Popup &amp; Branding Icon (#34)</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --canvas-bg: #eef0f5;
+        --chrome-bg: #dee1e6;
+        --chrome-surface: #ffffff;
+        --chrome-border: #d0d4dc;
+        --chrome-text: #202124;
+        --chrome-muted: #5f6368;
+
+        /* Pikabu light tokens (WCAG 2.1 AA verified) */
+        --color-black-300: #f7f8fc;
+        --color-bright-800: #fcfdff;
+        --color-black-430: #ebedf2;
+        --color-black-440: #e7e8ea;
+        --color-black-940: #1b1e24;
+        --color-black-800: #444850;
+        --color-black-700: #585c65;
+        --color-primary-900: #498228;
+        --color-primary-800: #4d882a;
+        --color-primary-700: #8bca58;
+        --color-primary-100: #eef7e8;
+        --color-danger-800: #f75c48;
+        --shadow-medium: 0 4px 20px 0 rgba(0, 0, 0, 0.1);
+        --c-btn-secondary-bgDefault: #dcdee5;
+        --c-btn-secondary-bgHover: #ced1d9;
+        --c-btnIcon-primary-bgHover: rgba(31, 32, 33, 0.08);
+        --focus-ring: #2f6b18;
+        --green-text: #2f6b18;
+        --error-text: #b33827;
+        --switch-track-off: #767b87;
+        --switch-track-on: #4d882a;
+        --switch-thumb: #ffffff;
+        --count-pill-bg: #fcfdff;
+        --count-pill-border: #d5d9e2;
+        --count-pill-text: #444850;
+        --cta-bg: #498228;
+        --cta-bg-hover: #3d6e21;
+        --cta-text: #ffffff;
+        --chip-active-bg: #498228;
+        --chip-active-text: #ffffff;
+      }
+
+      :root[data-theme-dark] {
+        color-scheme: dark;
+        --canvas-bg: #17181b;
+        --chrome-bg: #202124;
+        --chrome-surface: #2d2e32;
+        --chrome-border: #3c4043;
+        --chrome-text: #e8eaed;
+        --chrome-muted: #9aa0a6;
+
+        /* Pikabu dark tokens (WCAG 2.1 AA verified) */
+        --color-black-300: #222326;
+        --color-bright-800: #292a2e;
+        --color-black-430: #37393d;
+        --color-black-440: #2d3236;
+        --color-black-940: #e0e3ea;
+        --color-black-800: #b9bdc7;
+        --color-black-700: #a4a9b4;
+        --color-primary-900: #6fa350;
+        --color-primary-800: #6fa350;
+        --color-primary-700: #638c47;
+        --color-primary-100: #243322;
+        --color-danger-800: #ca4533;
+        --shadow-medium: 0 4px 20px 0 rgba(0, 0, 0, 0.34);
+        --c-btn-secondary-bgDefault: #45474d;
+        --c-btn-secondary-bgHover: #5e6066;
+        --c-btnIcon-primary-bgHover: rgba(255, 255, 255, 0.08);
+        --focus-ring: #9cd674;
+        --green-text: #9cd674;
+        --error-text: #ff9b8c;
+        --switch-track-off: #828794;
+        --switch-track-on: #659448;
+        --switch-thumb: #ffffff;
+        --count-pill-bg: #45474d;
+        --count-pill-border: #555860;
+        --count-pill-text: #e0e3ea;
+        --cta-bg: #78b34d;
+        --cta-bg-hover: #88c25d;
+        --cta-text: #16181c;
+        --chip-active-bg: #3e6e22;
+        --chip-active-text: #ffffff;
+      }
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        padding: 20px 16px 88px;
+        background: var(--canvas-bg);
+        color: var(--color-black-940);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-size: 14px;
+        line-height: 1.45;
+      }
+
+      .workspace {
+        max-width: 1080px;
+        margin: 0 auto;
+        display: grid;
+        gap: 20px;
+      }
+
+      .controls-ribbon {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px 14px;
+        padding: 10px 14px;
+        border-radius: 12px;
+        background: var(--color-bright-800);
+        border: 1px solid var(--color-black-430);
+      }
+
+      .ribbon-group {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .ribbon-label {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--color-black-700);
+        margin-right: 2px;
+      }
+
+      .chip-btn {
+        height: 28px;
+        padding: 0 10px;
+        border-radius: 7px;
+        border: 1px solid var(--color-black-430);
+        background: var(--color-black-300);
+        color: var(--color-black-800);
+        font: inherit;
+        font-size: 12px;
+        font-weight: 500;
+        cursor: pointer;
+        touch-action: manipulation;
+      }
+
+      .chip-btn[aria-pressed="true"] {
+        background: var(--chip-active-bg);
+        border-color: var(--chip-active-bg);
+        color: var(--chip-active-text);
+      }
+
+      .chip-btn:focus-visible,
+      .popup-root button:focus-visible,
+      .popup-root a:focus-visible,
+      .popup-root input:focus-visible,
+      .sync-checkbox:focus-visible,
+      .icon-card:focus-visible,
+      .proto-switcher button:focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
+      }
+
+      .stage-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+        gap: 20px;
+        align-items: start;
+      }
+
+      @media (max-width: 840px) {
+        .stage-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      .panel-card {
+        background: var(--color-bright-800);
+        border: 1px solid var(--color-black-430);
+        border-radius: 14px;
+        padding: 16px;
+      }
+
+      .panel-title {
+        margin: 0 0 4px;
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--color-black-940);
+      }
+
+      .panel-subtitle {
+        margin: 0 0 16px;
+        font-size: 12px;
+        color: var(--color-black-700);
+      }
+
+      /* Browser chrome simulation */
+      .browser-chrome {
+        background: var(--chrome-bg);
+        border: 1px solid var(--chrome-border);
+        border-radius: 12px;
+        overflow: hidden;
+      }
+
+      .browser-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 8px 12px;
+        background: var(--chrome-surface);
+        border-bottom: 1px solid var(--chrome-border);
+      }
+
+      .url-pill {
+        flex: 1 1 auto;
+        min-width: 0;
+        height: 28px;
+        padding: 0 10px;
+        border-radius: 14px;
+        background: var(--chrome-bg);
+        color: var(--chrome-muted);
+        font-size: 12px;
+        display: flex;
+        align-items: center;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .toolbar-ext-btn {
+        width: 28px;
+        height: 28px;
+        border-radius: 6px;
+        border: 0;
+        background: var(--c-btnIcon-primary-bgHover);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 auto;
+        cursor: default;
+      }
+
+      .popup-stage {
+        padding: 18px 14px 22px;
+        display: flex;
+        justify-content: flex-end;
+        background: var(--chrome-bg);
+      }
+
+      .popup-stage[data-device="mobile"] {
+        justify-content: center;
+        padding: 14px 10px 18px;
+      }
+
+      /* Actual popup surface under test */
+      .popup-shell {
+        width: 320px;
+        max-width: 100%;
+        border-radius: 12px;
+        background: var(--color-bright-800);
+        border: 1px solid var(--color-black-430);
+        box-shadow: var(--shadow-medium);
+        overflow: hidden;
+        overscroll-behavior: contain;
+        color: var(--color-black-940);
+      }
+
+      .popup-stage[data-device="mobile"] .popup-shell {
+        width: 360px;
+        border-radius: 16px;
+      }
+
+      .popup-root {
+        padding: 14px 16px;
+        display: grid;
+        gap: 12px;
+        font-size: 13px;
+        line-height: 18px;
+        color: var(--color-black-940);
+      }
+
+      .popup-stage[data-device="mobile"] .popup-root {
+        padding: 16px;
+        gap: 14px;
+        font-size: 14px;
+        line-height: 20px;
+      }
+
+      .popup-header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-width: 0;
+      }
+
+      .popup-brand-icon {
+        width: 24px;
+        height: 24px;
+        flex: 0 0 auto;
+        display: block;
+      }
+
+      .popup-title-wrap {
+        min-width: 0;
+        flex: 1 1 auto;
+      }
+
+      .popup-title {
+        margin: 0;
+        font-size: 14px;
+        font-weight: 600;
+        line-height: 18px;
+        color: var(--color-black-940);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .popup-version {
+        font-size: 11px;
+        line-height: 14px;
+        color: var(--color-black-700);
+        font-variant-numeric: tabular-nums;
+        flex: 0 0 auto;
+      }
+
+      .popup-divider {
+        height: 1px;
+        background: var(--color-black-430);
+        border: 0;
+        margin: 0;
+      }
+
+      /* Toggle switch (Variant A filled card & Variant C flat row) */
+      .switch-row {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 10px 12px;
+        margin: 0;
+        border-radius: 10px;
+        background: var(--color-black-300);
+        cursor: pointer;
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
+        min-height: 44px;
+        transition: background-color 150ms ease;
+      }
+
+      .switch-row:hover {
+        background: var(--color-black-440);
+      }
+
+      .switch-row--flat {
+        background: transparent;
+        padding: 8px;
+        margin: 0 -8px;
+        border-radius: 8px;
+      }
+
+      .switch-row--flat:hover {
+        background: var(--c-btnIcon-primary-bgHover);
+      }
+
+      .switch-copy {
+        display: grid;
+        gap: 2px;
+        min-width: 0;
+      }
+
+      .switch-title {
+        font-weight: 500;
+        color: var(--color-black-940);
+        overflow-wrap: anywhere;
+      }
+
+      .switch-desc {
+        font-size: 12px;
+        line-height: 16px;
+        color: var(--color-black-700);
+        overflow-wrap: anywhere;
+      }
+
+      .switch-control {
+        position: relative;
+        width: 40px;
+        height: 22px;
+        flex: 0 0 auto;
+        margin-top: 2px;
+      }
+
+      .switch-control input {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        opacity: 0;
+        cursor: pointer;
+      }
+
+      .switch-track {
+        display: block;
+        width: 40px;
+        height: 22px;
+        border-radius: 11px;
+        background: var(--switch-track-off);
+        position: relative;
+        transition: background-color 150ms ease;
+      }
+
+      .switch-track::after {
+        content: "";
+        position: absolute;
+        top: 3px;
+        left: 3px;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: var(--switch-thumb);
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
+        transition: transform 150ms ease;
+      }
+
+      .switch-control input:checked + .switch-track {
+        background: var(--switch-track-on);
+      }
+
+      .switch-control input:checked + .switch-track::after {
+        transform: translateX(18px);
+      }
+
+      .switch-control input:focus-visible + .switch-track {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
+      }
+
+      /* Native checkbox row (Variant B — mirrors on-page settings popover) */
+      .checkbox-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 8px;
+        margin: 0 -8px;
+        border-radius: 8px;
+        cursor: pointer;
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
+        min-height: 44px;
+        transition: background-color 150ms ease;
+      }
+
+      .checkbox-row:hover {
+        background: var(--c-btnIcon-primary-bgHover);
+      }
+
+      .checkbox-row input {
+        width: 18px;
+        height: 18px;
+        margin: 0;
+        flex: 0 0 auto;
+        accent-color: var(--switch-track-on);
+        cursor: pointer;
+      }
+
+      /* Status banner (Variant B) */
+      .status-banner {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 9px 12px;
+        border-radius: 9px;
+        font-size: 12px;
+        line-height: 16px;
+        font-weight: 500;
+      }
+
+      .status-banner[data-active="true"] {
+        background: var(--color-primary-100);
+        color: var(--green-text);
+      }
+
+      .status-banner[data-active="false"] {
+        background: var(--color-black-300);
+        color: var(--color-black-800);
+      }
+
+      .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: currentColor;
+        flex: 0 0 auto;
+      }
+
+      .status-lead {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+      }
+
+      .count-pill {
+        display: inline-flex;
+        align-items: center;
+        height: 22px;
+        padding: 0 8px;
+        border-radius: 11px;
+        background: var(--count-pill-bg);
+        border: 1px solid var(--count-pill-border);
+        color: var(--count-pill-text);
+        font-size: 12px;
+        font-weight: 500;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+        flex: 0 0 auto;
+      }
+
+      /* Action card (Variant C) */
+      .popup-action-box {
+        display: grid;
+        gap: 10px;
+        padding: 12px;
+        border-radius: 10px;
+        background: var(--color-black-300);
+      }
+
+      .popup-action-meta {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        font-size: 12px;
+        color: var(--color-black-800);
+      }
+
+      .popup-primary-btn {
+        width: 100%;
+        min-height: 38px;
+        padding: 8px 14px;
+        border: 0;
+        border-radius: 10px;
+        background: var(--cta-bg);
+        color: var(--cta-text);
+        font: inherit;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        cursor: pointer;
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
+        transition: background-color 150ms ease;
+      }
+
+      .popup-stage[data-device="mobile"] .popup-primary-btn {
+        min-height: 44px;
+      }
+
+      .popup-primary-btn:hover {
+        background: var(--cta-bg-hover);
+      }
+
+      .popup-primary-btn[data-running="true"] {
+        background: var(--c-btn-secondary-bgDefault);
+        color: var(--color-black-940);
+      }
+
+      .popup-primary-btn[data-running="true"]:hover {
+        background: var(--c-btn-secondary-bgHover);
+      }
+
+      .stop-square {
+        width: 9px;
+        height: 9px;
+        border-radius: 2px;
+        background: var(--error-text);
+        flex: 0 0 auto;
+      }
+
+      .popup-link {
+        color: var(--green-text);
+        font-weight: 500;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        min-height: 28px;
+        white-space: nowrap;
+        flex: 0 0 auto;
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
+      }
+
+      .popup-action-box .popup-link {
+        justify-self: start;
+      }
+
+      .popup-stage[data-device="mobile"] .popup-link {
+        min-height: 44px;
+        padding: 8px 0;
+      }
+
+      .popup-stage[data-device="mobile"] .popup-action-box .popup-link {
+        margin: -4px 0;
+      }
+
+      .popup-link:hover {
+        text-decoration: underline;
+      }
+
+      .popup-hint {
+        margin: 0;
+        font-size: 12px;
+        line-height: 16px;
+        color: var(--color-black-700);
+      }
+
+      .popup-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        font-size: 11px;
+        line-height: 15px;
+        color: var(--color-black-700);
+      }
+
+      /* Simulated on-page sync mirror */
+      .sync-mirror {
+        margin-top: 14px;
+        padding: 12px;
+        border-radius: 10px;
+        background: var(--color-black-300);
+        border: 1px dashed var(--color-black-430);
+        display: grid;
+        gap: 8px;
+      }
+
+      .sync-mirror-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--color-black-800);
+      }
+
+      .sync-badge {
+        font-size: 11px;
+        font-weight: 500;
+        padding: 2px 7px;
+        border-radius: 999px;
+        background: var(--color-primary-100);
+        color: var(--green-text);
+      }
+
+      .sync-log {
+        margin: 0;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 11px;
+        line-height: 16px;
+        color: var(--color-black-700);
+      }
+
+      /* Icon showcase */
+      .icon-concepts {
+        display: grid;
+        gap: 12px;
+      }
+
+      .icon-card {
+        border: 1px solid var(--color-black-430);
+        border-radius: 10px;
+        padding: 12px;
+        background: var(--color-black-300);
+        display: grid;
+        gap: 10px;
+        cursor: pointer;
+        text-align: left;
+        font: inherit;
+        color: inherit;
+        width: 100%;
+        touch-action: manipulation;
+      }
+
+      .icon-card[aria-pressed="true"] {
+        border-color: var(--color-primary-900);
+        box-shadow: 0 0 0 1px var(--color-primary-900);
+        background: var(--color-bright-800);
+      }
+
+      .icon-card-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 8px;
+      }
+
+      .icon-card-title {
+        font-weight: 600;
+        font-size: 13px;
+        color: var(--color-black-940);
+      }
+
+      .icon-card-note {
+        font-size: 11px;
+        color: var(--color-black-700);
+      }
+
+      .icon-previews {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+
+      .icon-strip {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-around;
+        gap: 6px;
+        padding: 10px 8px;
+        border-radius: 8px;
+        border: 1px solid rgba(128, 128, 128, 0.22);
+      }
+
+      .icon-strip[data-bg="light"] {
+        background: #ffffff;
+        color: #585c65;
+      }
+
+      .icon-strip[data-bg="dark"] {
+        background: #202124;
+        color: #9fa4af;
+      }
+
+      .icon-size-cell {
+        display: grid;
+        justify-items: center;
+        gap: 4px;
+        font-size: 10px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .store-badge-preview {
+        border: 1px dashed rgba(128, 128, 128, 0.35);
+        border-radius: 4px;
+        display: block;
+      }
+
+      /* Floating prototype switcher */
+      .proto-switcher {
+        position: fixed;
+        left: 50%;
+        bottom: 16px;
+        transform: translateX(-50%);
+        z-index: 9999;
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 6px 10px;
+        border-radius: 999px;
+        background: #1b1e24;
+        color: #f7f8fc;
+        box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28);
+        font-size: 13px;
+        font-weight: 500;
+      }
+
+      .proto-switcher button {
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        border: 0;
+        background: rgba(255, 255, 255, 0.14);
+        color: #ffffff;
+        font: inherit;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .proto-switcher button:hover {
+        background: rgba(255, 255, 255, 0.24);
+      }
+
+      .proto-switcher-label {
+        min-width: 210px;
+        text-align: center;
+        white-space: nowrap;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .switch-row,
+        .checkbox-row,
+        .switch-track,
+        .switch-track::after,
+        .popup-primary-btn {
+          transition: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="workspace">
+      <div class="controls-ribbon" role="region" aria-label="Параметры предпросмотра">
+        <div class="ribbon-group">
+          <span class="ribbon-label">Тема:</span>
+          <button type="button" class="chip-btn" data-set-theme="light" aria-pressed="true">
+            Светлая
+          </button>
+          <button type="button" class="chip-btn" data-set-theme="dark" aria-pressed="false">
+            Тёмная
+          </button>
+        </div>
+        <div class="ribbon-group">
+          <span class="ribbon-label">Экран:</span>
+          <button type="button" class="chip-btn" data-set-device="desktop" aria-pressed="true">
+            Desktop 320px
+          </button>
+          <button type="button" class="chip-btn" data-set-device="mobile" aria-pressed="false">
+            Android 360px
+          </button>
+        </div>
+        <div class="ribbon-group">
+          <span class="ribbon-label">Вкладка:</span>
+          <button type="button" class="chip-btn" data-set-context="post" aria-pressed="true">
+            Пост Pikabu
+          </button>
+          <button type="button" class="chip-btn" data-set-context="offsite" aria-pressed="false">
+            Другой сайт
+          </button>
+        </div>
+        <div class="ribbon-group">
+          <span class="ribbon-label">Язык:</span>
+          <button type="button" class="chip-btn" data-set-locale="ru" aria-pressed="true">
+            RU
+          </button>
+          <button type="button" class="chip-btn" data-set-locale="en" aria-pressed="false">
+            EN
+          </button>
+        </div>
+      </div>
+
+      <div class="stage-grid">
+        <section class="panel-card" aria-labelledby="popup-heading">
+          <h1 class="panel-title" id="popup-heading">Toolbar Popup Prototype</h1>
+          <p class="panel-subtitle" id="variant-rationale"></p>
+
+          <div class="browser-chrome">
+            <div class="browser-toolbar">
+              <div class="url-pill" id="mock-url" translate="no">
+                https://pikabu.ru/story/poputchik_7957162
+              </div>
+              <button
+                type="button"
+                class="toolbar-ext-btn"
+                id="toolbar-ext-btn"
+                aria-label="Pikabu Expand Comments"
+              ></button>
+            </div>
+            <div class="popup-stage" id="popup-stage" data-device="desktop">
+              <div class="popup-shell" id="popup-shell">
+                <div class="popup-root" id="popup-root"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="sync-mirror" aria-label="Симуляция синхронизации storage.local">
+            <div class="sync-mirror-header">
+              <span>On-page Settings Popover (Pikabu Post Page)</span>
+              <span class="sync-badge" id="sync-status">storage.local synced</span>
+            </div>
+            <label class="checkbox-row" style="margin: 0; padding: 6px 8px">
+              <input
+                type="checkbox"
+                class="sync-checkbox"
+                id="onpage-checkbox"
+                name="onPageAutoExpand"
+                autocomplete="off"
+              />
+              <span id="onpage-label">Раскрывать комментарии при открытии поста</span>
+            </label>
+            <p class="sync-log" id="sync-log" aria-live="polite">
+              storage.local.autoExpandOnVisit = false
+            </p>
+          </div>
+        </section>
+
+        <section class="panel-card" aria-labelledby="icons-heading">
+          <h2 class="panel-title" id="icons-heading">
+            Extension Icon Concepts (16 / 32 / 48 / 128* px)
+          </h2>
+          <p class="panel-subtitle">
+            Dedicated 16/32px toolbar optical masters (stroke-free, ≥3.9:1 on light &amp; dark
+            bars) + 128px CWS store master (96×96 artwork + 16px safe padding, shown at 64px half-scale).
+          </p>
+          <div class="icon-concepts" id="icon-concepts"></div>
+        </section>
+      </div>
+    </main>
+
+    <nav class="proto-switcher" aria-label="Переключатель вариантов прототипа">
+      <button type="button" id="prev-variant" aria-label="Предыдущий вариант">←</button>
+      <span class="proto-switcher-label" id="switcher-label"></span>
+      <button type="button" id="next-variant" aria-label="Следующий вариант">→</button>
+    </nav>
+
+    <script>
+      const ICONS = [
+        {
+          id: "1",
+          name: "Icon 1 — Pikabu Bubble + Double-Down",
+          note: "Echoes on-page double-chevron; cleanest at 16px",
+          svg(size, optical = "toolbar") {
+            if (optical === "store") {
+              // Exact 96x96 centered artwork + 16px transparent margin (CWS 128px spec)
+              // Bubble body spans y=18..92 (height 74); chevrons span outer y=32.25..75.75 (~14-16px balanced top/bottom padding)
+              return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="${size}" height="${size}" aria-hidden="true" focusable="false">
+                <path d="M30 18h68c7.7 0 14 6.3 14 14v46c0 7.7-6.3 14-14 14H58l-16 15c-2.4 2.2-6 .5-6-2.7V92h-6c-7.7 0-14-6.3-14-14V32c0-7.7 6.3-14 14-14z" fill="#4f8c2b"/>
+                <path d="M46 37l18 14 18-14M46 57l18 14 18-14" fill="none" stroke="#ffffff" stroke-width="9.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>`;
+            }
+            // Dedicated crisp toolbar optical master (fills ~15x15 on 16px grid, stroke-free)
+            // Bubble body spans y=1.25..12.0; chevrons span outer y=3.25..10.05 (~2px balanced top/bottom padding)
+            return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="${size}" height="${size}" aria-hidden="true" focusable="false">
+              <path d="M2.5 1.25h11a2 2 0 0 1 2 2V10a2 2 0 0 1-2 2H7l-2.6 2.4a.7.7 0 0 1-1.15-.52V12H2.5a2 2 0 0 1-2-2V3.25a2 2 0 0 1 2-2z" fill="#4f8c2b"/>
+              <path d="M5 4.0 8 6.3 11 4.0M5 7.0 8 9.3 11 7.0" fill="none" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>`;
+          },
+        },
+        {
+          id: "2",
+          name: "Icon 2 — Rounded Badge + Unfold Chevrons",
+          note: "Minimal squircle with bold vertical unfold bars",
+          svg(size, optical = "toolbar") {
+            if (optical === "store") {
+              return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="${size}" height="${size}" aria-hidden="true" focusable="false">
+                <rect x="16" y="16" width="96" height="96" rx="22" fill="#4f8c2b"/>
+                <rect x="34" y="34" width="60" height="12" rx="6" fill="#ffffff"/>
+                <path d="M44 61l20 16 20-16M44 82l20 16 20-16" fill="none" stroke="#ffffff" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>`;
+            }
+            return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="${size}" height="${size}" aria-hidden="true" focusable="false">
+              <rect x="1" y="1" width="14" height="14" rx="3.2" fill="#4f8c2b"/>
+              <rect x="3.5" y="3.5" width="9" height="1.8" rx="0.9" fill="#ffffff"/>
+              <path d="M4.6 7.4 8 10.1l3.4-2.7M4.6 10.5 8 13.2l3.4-2.7" fill="none" stroke="#ffffff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>`;
+          },
+        },
+        {
+          id: "3",
+          name: "Icon 3 — Layered Comment Cards + Chevrons",
+          note: "Two-tone card stack (no download-arrow ambiguity)",
+          svg(size, optical = "toolbar") {
+            if (optical === "store") {
+              return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="${size}" height="${size}" aria-hidden="true" focusable="false">
+                <rect x="28" y="16" width="84" height="58" rx="14" fill="#8bca58"/>
+                <path d="M28 32h70c6.6 0 12 5.4 12 12v34c0 6.6-5.4 12-12 12H54l-14 12c-2.2 1.8-5.5.3-5.5-2.5V90H28c-6.6 0-12-5.4-12-12V44c0-6.6 5.4-12 12-12z" fill="#4f8c2b"/>
+                <path d="M44 50l19 15 19-15M44 69l19 15 19-15" fill="none" stroke="#ffffff" stroke-width="9.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>`;
+            }
+            return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="${size}" height="${size}" aria-hidden="true" focusable="false">
+              <rect x="3.2" y="1" width="11.8" height="8" rx="2" fill="#8bca58"/>
+              <path d="M2.5 3.4h9.8a2 2 0 0 1 2 2v5.3a2 2 0 0 1-2 2H6.5l-2.3 2a.65.65 0 0 1-1.08-.48V12.7H2.5a2 2 0 0 1-2-2V5.4a2 2 0 0 1 2-2z" fill="#4f8c2b"/>
+              <path d="M4.6 6.4 7.4 8.7l2.8-2.3M4.6 9.2 7.4 11.5l2.8-2.3" fill="none" stroke="#ffffff" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>`;
+          },
+        },
+      ];
+
+      const COPY = {
+        ru: {
+          title: "Pikabu Expand Comments",
+          toggleLabel: "Раскрывать комментарии при открытии поста",
+          toggleShort: "Раскрывать при открытии поста",
+          toggleDesc: "Запускает раскрытие автоматически, без нажатия кнопки.",
+          scopeHint:
+            'Кнопки управления находятся рядом с вкладками комментариев на страницах постов <span translate="no">pikabu.ru</span>.',
+          perDevice: "Сохраняется локально на этом устройстве",
+          activePost: "Активно на этом посте",
+          offsitePost: 'Откройте пост на <span translate="no">pikabu.ru</span>',
+          openPikabu: 'Открыть <span translate="no">Pikabu</span>',
+          expandBtn: "Раскрыть все комментарии",
+          stopBtn: "Остановить",
+          runningStatus: "Раскрываем комментарии…",
+          idleStatus: "Готово к раскрытию",
+          offsiteCard:
+            'Откройте любой пост на <span translate="no">pikabu.ru</span>, чтобы раскрывать комментарии.',
+        },
+        en: {
+          title: "Pikabu Expand Comments",
+          toggleLabel: "Expand comments automatically on visit",
+          toggleShort: "Auto-expand on post visit",
+          toggleDesc: "Starts expanding comments automatically without clicking.",
+          scopeHint:
+            'Controls appear beside the comment tabs on <span translate="no">pikabu.ru</span> post pages.',
+          perDevice: "Stored locally on this device",
+          activePost: "Active on this post",
+          offsitePost: 'Open a <span translate="no">Pikabu</span> post page',
+          openPikabu: 'Open <span translate="no">Pikabu</span>',
+          expandBtn: "Expand all comments",
+          stopBtn: "Stop",
+          runningStatus: "Expanding comments…",
+          idleStatus: "Ready to expand",
+          offsiteCard:
+            'Open any <span translate="no">pikabu.ru</span> post page to expand its comments.',
+        },
+      };
+
+      const VARIANTS = [
+        {
+          key: "A",
+          name: "Clean Utility Card",
+          rationale:
+            "Variant A (Zero extra permissions): pure settings-first card using only storage.local. No activeTab permission, no tab messaging, identical on desktop and Android.",
+        },
+        {
+          key: "B",
+          name: "Context-Aware Sheet",
+          rationale:
+            "Variant B (activeTab status): adds a top context banner (Active on this post + counter vs Open Pikabu) above the native checkbox row matching the on-page settings popover.",
+        },
+        {
+          key: "C",
+          name: "Quick-Action + Setting",
+          rationale:
+            "Variant C (activeTab + tab messaging): elevates Expand/Stop right inside the popup for one-tap access from Firefox Android's Extensions menu, with Auto-Expand below.",
+        },
+      ];
+
+      const params = new URLSearchParams(location.search);
+      const state = {
+        variant: ["A", "B", "C"].includes(params.get("variant")) ? params.get("variant") : "A",
+        theme: params.get("theme") === "dark" ? "dark" : "light",
+        device: params.get("device") === "mobile" ? "mobile" : "desktop",
+        context: params.get("context") === "offsite" ? "offsite" : "post",
+        locale: params.get("locale") === "en" ? "en" : "ru",
+        icon: ["1", "2", "3"].includes(params.get("icon")) ? params.get("icon") : "1",
+        autoExpandOnVisit: params.get("auto") === "1",
+        running: false,
+      };
+
+      function syncUrl() {
+        const next = new URL(location.href);
+        next.searchParams.set("variant", state.variant);
+        next.searchParams.set("theme", state.theme);
+        next.searchParams.set("device", state.device);
+        next.searchParams.set("context", state.context);
+        next.searchParams.set("locale", state.locale);
+        next.searchParams.set("icon", state.icon);
+        history.replaceState(null, "", next);
+      }
+
+      function currentIcon() {
+        return ICONS.find((item) => item.id === state.icon) || ICONS[0];
+      }
+
+      function setAutoExpand(nextValue, source) {
+        if (state.autoExpandOnVisit === nextValue) return;
+        state.autoExpandOnVisit = nextValue;
+        const log = document.getElementById("sync-log");
+        log.textContent = `storage.onChanged (${source}) → autoExpandOnVisit = ${nextValue}`;
+        render();
+      }
+
+      function renderVariantA(t, icon) {
+        return `
+          <div class="popup-header">
+            <span class="popup-brand-icon">${icon.svg(24, "toolbar")}</span>
+            <div class="popup-title-wrap">
+              <h2 class="popup-title" translate="no">${t.title}</h2>
+            </div>
+            <span class="popup-version">v0.2.0</span>
+          </div>
+          <label class="switch-row">
+            <span class="switch-copy">
+              <span class="switch-title">${t.toggleLabel}</span>
+              <span class="switch-desc">${t.toggleDesc}</span>
+            </span>
+            <span class="switch-control">
+              <input type="checkbox" role="switch" id="popup-auto-toggle" name="autoExpandOnVisit" autocomplete="off" ${
+                state.autoExpandOnVisit ? "checked" : ""
+              } />
+              <span class="switch-track" aria-hidden="true"></span>
+            </span>
+          </label>
+          <hr class="popup-divider" />
+          <p class="popup-hint">${t.scopeHint}</p>
+        `;
+      }
+
+      function renderVariantB(t, icon) {
+        const isPost = state.context === "post";
+        return `
+          <div class="popup-header">
+            <span class="popup-brand-icon">${icon.svg(24, "toolbar")}</span>
+            <div class="popup-title-wrap">
+              <h2 class="popup-title" translate="no">${t.title}</h2>
+            </div>
+            <span class="popup-version">v0.2.0</span>
+          </div>
+          <div class="status-banner" data-active="${isPost}">
+            <span class="status-lead">
+              <span class="status-dot" aria-hidden="true"></span>
+              <span>${isPost ? t.activePost : t.offsitePost}</span>
+            </span>
+            ${
+              isPost
+                ? `<span class="count-pill">42 / 144</span>`
+                : `<a class="popup-link" href="https://pikabu.ru" target="_blank" rel="noopener noreferrer">${t.openPikabu} <span aria-hidden="true">↗</span></a>`
+            }
+          </div>
+          <label class="checkbox-row">
+            <input type="checkbox" id="popup-auto-toggle" name="autoExpandOnVisit" autocomplete="off" ${
+              state.autoExpandOnVisit ? "checked" : ""
+            } />
+            <span>${t.toggleLabel}</span>
+          </label>
+          <hr class="popup-divider" />
+          <div class="popup-footer">
+            <span>${t.perDevice}</span>
+          </div>
+        `;
+      }
+
+      function renderVariantC(t, icon) {
+        const isPost = state.context === "post";
+        return `
+          <div class="popup-header">
+            <span class="popup-brand-icon">${icon.svg(24, "toolbar")}</span>
+            <div class="popup-title-wrap">
+              <h2 class="popup-title" translate="no">${t.title}</h2>
+            </div>
+            <span class="popup-version">v0.2.0</span>
+          </div>
+          ${
+            isPost
+              ? `<div class="popup-action-box">
+                  <div class="popup-action-meta" aria-live="polite" aria-atomic="true">
+                    <span>${state.running ? t.runningStatus : t.idleStatus}</span>
+                    <span class="count-pill">${state.running ? "68 / 144" : "42 / 144"}</span>
+                  </div>
+                  <button type="button" class="popup-primary-btn" id="popup-action-btn" data-running="${state.running}">
+                    ${state.running ? `<span class="stop-square" aria-hidden="true"></span>` : ""}
+                    <span>${state.running ? t.stopBtn : t.expandBtn}</span>
+                  </button>
+                </div>`
+              : `<div class="popup-action-box">
+                  <p class="popup-hint">${t.offsiteCard}</p>
+                  <a class="popup-link" href="https://pikabu.ru" target="_blank" rel="noopener noreferrer">${t.openPikabu} <span aria-hidden="true">↗</span></a>
+                </div>`
+          }
+          <hr class="popup-divider" />
+          <label class="switch-row switch-row--flat">
+            <span class="switch-copy">
+              <span class="switch-title">${t.toggleShort}</span>
+              <span class="switch-desc">${t.perDevice}</span>
+            </span>
+            <span class="switch-control">
+              <input type="checkbox" role="switch" id="popup-auto-toggle" name="autoExpandOnVisit" autocomplete="off" ${
+                state.autoExpandOnVisit ? "checked" : ""
+              } />
+              <span class="switch-track" aria-hidden="true"></span>
+            </span>
+          </label>
+        `;
+      }
+
+      function renderIcons() {
+        const container = document.getElementById("icon-concepts");
+        container.innerHTML = ICONS.map(
+          (item) => `
+          <button type="button" id="icon-card-${item.id}" class="icon-card" data-select-icon="${item.id}" aria-pressed="${
+            state.icon === item.id
+          }">
+            <div class="icon-card-head">
+              <span class="icon-card-title">${item.name}</span>
+              <span class="icon-card-note">${item.note}</span>
+            </div>
+            <div class="icon-previews">
+              <div class="icon-strip" data-bg="light">
+                ${[16, 32, 48]
+                  .map(
+                    (s) =>
+                      `<span class="icon-size-cell">${item.svg(s, "toolbar")}<span>${s}</span></span>`,
+                  )
+                  .join("")}
+                <span class="icon-size-cell"><span class="store-badge-preview">${item.svg(64, "store")}</span><span>128*</span></span>
+              </div>
+              <div class="icon-strip" data-bg="dark">
+                ${[16, 32, 48]
+                  .map(
+                    (s) =>
+                      `<span class="icon-size-cell">${item.svg(s, "toolbar")}<span>${s}</span></span>`,
+                  )
+                  .join("")}
+                <span class="icon-size-cell"><span class="store-badge-preview">${item.svg(64, "store")}</span><span>128*</span></span>
+              </div>
+            </div>
+          </button>`,
+        ).join("");
+        container.querySelectorAll("[data-select-icon]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            state.icon = btn.getAttribute("data-select-icon");
+            syncUrl();
+            render();
+          });
+        });
+      }
+
+      function render() {
+        const focusedId = document.activeElement?.id;
+
+        document.documentElement.toggleAttribute("data-theme-dark", state.theme === "dark");
+        document.documentElement.lang = state.locale;
+
+        const t = COPY[state.locale];
+        const icon = currentIcon();
+        const variantMeta = VARIANTS.find((v) => v.key === state.variant) || VARIANTS[0];
+
+        document.getElementById("variant-rationale").textContent = variantMeta.rationale;
+        document.getElementById("switcher-label").textContent = `${variantMeta.key} (${variantMeta.name})`;
+        document.getElementById("mock-url").textContent =
+          state.context === "post"
+            ? "https://pikabu.ru/story/poputchik_7957162"
+            : "https://example.com/news";
+        document.getElementById("toolbar-ext-btn").innerHTML = icon.svg(16, "toolbar");
+        document.getElementById("popup-stage").dataset.device = state.device;
+
+        const root = document.getElementById("popup-root");
+        root.innerHTML =
+          state.variant === "A"
+            ? renderVariantA(t, icon)
+            : state.variant === "B"
+              ? renderVariantB(t, icon)
+              : renderVariantC(t, icon);
+
+        const popupToggle = document.getElementById("popup-auto-toggle");
+        if (popupToggle) {
+          popupToggle.addEventListener("change", () =>
+            setAutoExpand(popupToggle.checked, "popup"),
+          );
+        }
+        const actionBtn = document.getElementById("popup-action-btn");
+        if (actionBtn) {
+          actionBtn.addEventListener("click", () => {
+            state.running = !state.running;
+            render();
+          });
+        }
+
+        const onPageCheckbox = document.getElementById("onpage-checkbox");
+        onPageCheckbox.checked = state.autoExpandOnVisit;
+        document.getElementById("onpage-label").textContent = t.toggleLabel;
+
+        document.querySelectorAll("[data-set-theme]").forEach((b) =>
+          b.setAttribute("aria-pressed", String(b.getAttribute("data-set-theme") === state.theme)),
+        );
+        document.querySelectorAll("[data-set-device]").forEach((b) =>
+          b.setAttribute("aria-pressed", String(b.getAttribute("data-set-device") === state.device)),
+        );
+        document.querySelectorAll("[data-set-context]").forEach((b) =>
+          b.setAttribute(
+            "aria-pressed",
+            String(b.getAttribute("data-set-context") === state.context),
+          ),
+        );
+        document.querySelectorAll("[data-set-locale]").forEach((b) =>
+          b.setAttribute("aria-pressed", String(b.getAttribute("data-set-locale") === state.locale)),
+        );
+
+        renderIcons();
+
+        if (focusedId) {
+          const restore = document.getElementById(focusedId);
+          if (restore instanceof HTMLElement) restore.focus({ preventScroll: true });
+        }
+      }
+
+      document.getElementById("onpage-checkbox").addEventListener("change", (event) => {
+        setAutoExpand(event.target.checked, "content-script");
+      });
+
+      document.querySelectorAll("[data-set-theme]").forEach((b) =>
+        b.addEventListener("click", () => {
+          state.theme = b.getAttribute("data-set-theme");
+          syncUrl();
+          render();
+        }),
+      );
+      document.querySelectorAll("[data-set-device]").forEach((b) =>
+        b.addEventListener("click", () => {
+          state.device = b.getAttribute("data-set-device");
+          syncUrl();
+          render();
+        }),
+      );
+      document.querySelectorAll("[data-set-context]").forEach((b) =>
+        b.addEventListener("click", () => {
+          state.context = b.getAttribute("data-set-context");
+          syncUrl();
+          render();
+        }),
+      );
+      document.querySelectorAll("[data-set-locale]").forEach((b) =>
+        b.addEventListener("click", () => {
+          state.locale = b.getAttribute("data-set-locale");
+          syncUrl();
+          render();
+        }),
+      );
+
+      function cycleVariant(delta) {
+        const idx = VARIANTS.findIndex((v) => v.key === state.variant);
+        state.variant = VARIANTS[(idx + delta + VARIANTS.length) % VARIANTS.length].key;
+        syncUrl();
+        render();
+      }
+
+      document.getElementById("prev-variant").addEventListener("click", () => cycleVariant(-1));
+      document.getElementById("next-variant").addEventListener("click", () => cycleVariant(1));
+      document.addEventListener("keydown", (event) => {
+        const tag = document.activeElement?.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA" || document.activeElement?.isContentEditable) {
+          return;
+        }
+        if (event.key === "ArrowLeft") cycleVariant(-1);
+        if (event.key === "ArrowRight") cycleVariant(1);
+      });
+
+      render();
+    </script>
+  </body>
+</html>
