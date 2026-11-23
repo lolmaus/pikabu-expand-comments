@@ -291,3 +291,128 @@ test("discloses the saved preference and restores it if saving fails", async () 
   expect(popover.hidden).toBe(true);
   expect(shadow.activeElement).toBe(settings);
 });
+
+test("renders mobile companion strip after the menu, switches status to alert on error, and docks progress ribbon below sticky header", () => {
+  document.body.innerHTML = `
+    <div class="story-comments">
+      <section class="story-comments__menu"></section>
+      <section class="comments"><div class="comments__container"></div></section>
+    </div>
+  `;
+  const menu = document.querySelector<HTMLElement>(".story-comments__menu")!;
+  const container = document.querySelector<HTMLElement>(".comments__container")!;
+  const start = vi.fn();
+  const stop = vi.fn();
+  let topInset = 56;
+  let bottomHost: HTMLElement | undefined;
+
+  const render = mountExpansionControl(
+    menu,
+    { start, stop, scrollToBottom: vi.fn(), saveAutoExpandOnVisit: async () => true },
+    Promise.resolve(false),
+    undefined,
+    (host) => {
+      bottomHost = host;
+      container.after(host);
+    },
+    {
+      layout: "mobile",
+      getTopInset: () => topInset,
+    },
+  );
+
+  // Mobile top host mounts immediately AFTER .story-comments__menu (never inside it).
+  expect(menu.children).toHaveLength(0);
+  const topHost = menu.nextElementSibling as HTMLElement;
+  expect(topHost.dataset["pikabuExpandComments"]).toBe("top");
+  expect(topHost.dataset["layout"]).toBe("mobile");
+
+  const topShadow = topHost.shadowRoot!;
+  const bottomShadow = bottomHost!.shadowRoot!;
+  const button = topShadow.querySelector<HTMLButtonElement>("button.action-button")!;
+  const counter = topShadow.querySelector<HTMLElement>('[data-role="counter"]')!;
+  const liveStatus = topShadow.querySelector<HTMLElement>(".sr-only")!;
+  const inlineError = topShadow.querySelector<HTMLElement>(".inline-error")!;
+  const ribbon = topShadow.querySelector<HTMLElement>('[data-role="floating-ribbon"]')!;
+  const ribbonCounter = topShadow.querySelector<HTMLElement>('[data-role="ribbon-counter"]')!;
+  const ribbonStop = ribbon.querySelector<HTMLButtonElement>("button.floating-stop")!;
+
+  const base = {
+    loadedCommentsCount: 1,
+    totalCommentsCount: 1710,
+    expandedStepsCount: 0,
+    remainingLoadersCount: 1,
+    skippedCount: 0,
+    initiallyEmpty: false,
+  };
+
+  render({ ...base, state: "idle" });
+  expect(button.textContent).toBe("Раскрыть все");
+  expect(counter.textContent).toBe("1\u00a0/\u00a01710");
+  expect(inlineError.hidden).toBe(true);
+  expect(liveStatus.getAttribute("role")).toBe("status");
+  expect(liveStatus.getAttribute("aria-live")).toBe("polite");
+  expect(ribbon.hidden).toBe(true);
+
+  // Top strip scrolled behind the 56px sticky header while bottom is offscreen -> progress ribbon docks at 56px.
+  vi.spyOn(topHost, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 390, 56));
+  vi.spyOn(bottomHost!, "getBoundingClientRect").mockReturnValue(
+    new DOMRect(0, window.innerHeight + 100, 360, 56),
+  );
+  render({ ...base, loadedCommentsCount: 428, state: "running" });
+  expect(button.textContent).toBe("Остановить");
+  expect(ribbon.hidden).toBe(false);
+  expect(ribbon.style.top).toBe("56px");
+  expect(ribbon.dataset["flushTop"]).toBe("false");
+  expect(ribbonCounter.textContent).toBe("428\u00a0/\u00a01710");
+  // No duplicate role="status" inside the ribbon.
+  expect(ribbon.querySelector('[role="status"]')).toBeNull();
+
+  // When sticky header auto-hides (inset = 0), ribbon tracks flush to 0px with safe-area padding flag.
+  topInset = 0;
+  vi.spyOn(topHost, "getBoundingClientRect").mockReturnValue(new DOMRect(0, -60, 390, 56));
+  window.dispatchEvent(new Event("scroll"));
+  expect(ribbon.style.top).toBe("0px");
+  expect(ribbon.dataset["flushTop"]).toBe("true");
+
+  ribbonStop.click();
+  expect(stop).toHaveBeenCalledOnce();
+
+  // Error state switches top live region to role="alert" + aria-live="assertive" and shows inline error.
+  render({ ...base, loadedCommentsCount: 428, state: "error" });
+  expect(button.textContent).toBe("Повторить");
+  expect(inlineError.hidden).toBe(false);
+  expect(liveStatus.getAttribute("role")).toBe("alert");
+  expect(liveStatus.getAttribute("aria-live")).toBe("assertive");
+  expect(liveStatus.textContent).toBe("Ошибка загрузки комментариев.");
+
+  // Only one settings gear can be expanded at a time, aria-controls targets a real popover,
+  // bottom popover opens above the bottom gear, and outside-tap dismissal restores focus.
+  const topGear = topShadow.querySelector<HTMLButtonElement>('[data-role="settings"]')!;
+  const bottomGear = bottomShadow.querySelector<HTMLButtonElement>('[data-role="settings"]')!;
+  const topPopover = topShadow.querySelector<HTMLElement>(
+    `#${topGear.getAttribute("aria-controls")}`,
+  );
+  const bottomPopover = bottomShadow.querySelector<HTMLElement>(
+    `#${bottomGear.getAttribute("aria-controls")}`,
+  )!;
+  expect(topPopover).not.toBeNull();
+  expect(bottomPopover).not.toBeNull();
+  vi.spyOn(bottomGear, "getBoundingClientRect").mockReturnValue(new DOMRect(330, 680, 44, 44));
+
+  topGear.click();
+  expect(topGear.getAttribute("aria-expanded")).toBe("true");
+  expect(bottomGear.getAttribute("aria-expanded")).toBe("false");
+
+  bottomGear.click();
+  expect(topGear.getAttribute("aria-expanded")).toBe("false");
+  expect(bottomGear.getAttribute("aria-expanded")).toBe("true");
+  expect(Number.parseInt(bottomPopover.style.top, 10)).toBeLessThan(680);
+
+  // Light-dismiss (outside tap) closes the top-layer popover and returns focus to the active gear.
+  const outsideClose = new Event("toggle");
+  Object.defineProperty(outsideClose, "newState", { value: "closed" });
+  bottomPopover.dispatchEvent(outsideClose);
+  expect(bottomGear.getAttribute("aria-expanded")).toBe("false");
+  expect(bottomShadow.activeElement).toBe(bottomGear);
+});

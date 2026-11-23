@@ -1,65 +1,90 @@
 import { expect, test } from "@playwright/test";
 import {
+  ALL_VISUAL_VIEWPORTS,
   VISUAL_POST_URL,
   VISUAL_THEMES,
   VISUAL_VIEWPORTS,
   assertLightDarkTokenParity,
   auditCurrentState,
+  auditMobileState,
   evaluateP0Gates,
   measureTabBar,
   preparePikabuVisualPage,
+  resetCls,
   type TokenAuditReport,
 } from "../support/visual-audit.ts";
 
 test("passes all P0 visual, geometry, token, axe-core, and Shadow DOM contrast gates in light and dark themes", async ({
   browser,
 }) => {
-  for (const viewport of VISUAL_VIEWPORTS) {
+  for (const viewport of ALL_VISUAL_VIEWPORTS) {
+    const isMobile = viewport.profile === "mobile";
+    const contextOptions = isMobile ? { hasTouch: true, isMobile: true } : {};
+    const startLabel = isMobile ? "Раскрыть все" : "Раскрыть все комментарии";
     const tokensByTheme: Partial<Record<(typeof VISUAL_THEMES)[number], TokenAuditReport>> = {};
 
     for (const theme of VISUAL_THEMES) {
-      const baselineContext = await browser.newContext();
+      const baselineContext = await browser.newContext(contextOptions);
       const baselinePage = await baselineContext.newPage();
-      await preparePikabuVisualPage(baselinePage, { theme, viewport, withUserscript: false });
+      await preparePikabuVisualPage(baselinePage, {
+        theme,
+        viewport,
+        withUserscript: false,
+        showFloorAd: isMobile,
+      });
       await baselinePage.goto(VISUAL_POST_URL);
       const baseline = await measureTabBar(baselinePage);
       await baselineContext.close();
 
-      const context = await browser.newContext();
+      const context = await browser.newContext(contextOptions);
       const page = await context.newPage();
-      await preparePikabuVisualPage(page, { theme, viewport, withUserscript: true });
+      await preparePikabuVisualPage(page, {
+        theme,
+        viewport,
+        withUserscript: true,
+        showFloorAd: isMobile,
+      });
       await page.goto(VISUAL_POST_URL);
-      const menu = page.locator(".story-comments__menu");
-      await expect(menu.getByRole("button", { name: "Раскрыть все комментарии" })).toBeVisible();
+      const top = page.locator('[data-pikabu-expand-comments="top"]');
+      const bottom = page.locator('[data-pikabu-expand-comments="bottom"]');
+      await expect(top.getByRole("button", { name: startLabel })).toBeVisible();
 
-      const idle = await auditCurrentState(page, "idle", baseline, { checkCls: true });
+      const idle = await auditCurrentState(page, "idle", baseline, { checkCls: !isMobile });
       expect(idle.p0.failures, `P0 failures (${theme} ${viewport.name} idle)`).toEqual([]);
       expect(idle.axe.incomplete, `axe-core incomplete (${theme} ${viewport.name} idle)`).toEqual(
         [],
       );
       tokensByTheme[theme] = idle.tokens;
 
-      // Bottom controls must stay clearly separated below Pikabu's `.comment__more` button
-      // even when outer host CSS resets `div, span { margin: 0; padding: 0; }`.
-      const bottomGap = await page.evaluate(() => {
-        const more = document.querySelector<HTMLElement>(".comment__more");
-        const bottomAction = document
-          .querySelector<HTMLElement>('[data-pikabu-expand-comments="bottom"]')
-          ?.shadowRoot?.querySelector<HTMLElement>("button.action-button");
-        if (!more || !bottomAction) return null;
-        return Math.round(
-          bottomAction.getBoundingClientRect().top - more.getBoundingClientRect().bottom,
-        );
-      });
-      expect(
-        bottomGap,
-        `Bottom controls gap below .comment__more (${theme} ${viewport.name})`,
-      ).toBeGreaterThanOrEqual(24);
+      if (isMobile) {
+        await resetCls(page);
+        const mobileIdle = await auditMobileState(page);
+        expect(mobileIdle.topStripHeight).toBe(56);
+        expect(mobileIdle.minTouchTarget).toBeGreaterThanOrEqual(44);
+        expect(mobileIdle.expandedGears).toBe(0);
+      } else {
+        // Bottom controls must stay clearly separated below Pikabu's `.comment__more` button
+        // even when outer host CSS resets `div, span { margin: 0; padding: 0; }`.
+        const bottomGap = await page.evaluate(() => {
+          const more = document.querySelector<HTMLElement>(".comment__more");
+          const bottomAction = document
+            .querySelector<HTMLElement>('[data-pikabu-expand-comments="bottom"]')
+            ?.shadowRoot?.querySelector<HTMLElement>("button.action-button");
+          if (!more || !bottomAction) return null;
+          return Math.round(
+            bottomAction.getBoundingClientRect().top - more.getBoundingClientRect().bottom,
+          );
+        });
+        expect(
+          bottomGap,
+          `Bottom controls gap below .comment__more (${theme} ${viewport.name})`,
+        ).toBeGreaterThanOrEqual(24);
+      }
 
-      const settingsButton = menu.getByRole("button", { name: "Настройки" });
+      const settingsButton = top.getByRole("button", { name: "Настройки" });
       await settingsButton.click();
       await expect(
-        menu.getByRole("checkbox", { name: "Раскрывать комментарии при открытии поста" }),
+        top.getByRole("checkbox", { name: "Раскрывать комментарии при открытии поста" }),
       ).toBeVisible();
       const settingsOpen = await auditCurrentState(page, "settings-open", baseline, {
         checkCls: true,
@@ -81,6 +106,18 @@ test("passes all P0 visual, geometry, token, axe-core, and Shadow DOM contrast g
         settingsClosed.p0.failures,
         `P0 failures (${theme} ${viewport.name} settings-closed)`,
       ).toEqual([]);
+
+      if (isMobile) {
+        await bottom.scrollIntoViewIfNeeded();
+        await bottom.getByRole("button", { name: "Настройки" }).click();
+        await expect(
+          bottom.getByRole("checkbox", { name: "Раскрывать комментарии при открытии поста" }),
+        ).toBeVisible();
+        const mobileBottomPop = await auditMobileState(page);
+        expect(mobileBottomPop.popoverOverlapsTrigger).toBe(false);
+        expect(mobileBottomPop.popoverOverlapsAd).toBe(false);
+        expect(mobileBottomPop.expandedGears).toBe(1);
+      }
 
       await context.close();
     }

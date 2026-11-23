@@ -5,6 +5,7 @@ const scrollKeys = new Set(["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home"
 export function createScrollPreservation(
   document: Document,
   getContainer: () => HTMLElement | null,
+  getTopInset: () => number = () => 0,
 ) {
   const page = document.defaultView!;
   let listening: AbortController | undefined;
@@ -145,21 +146,31 @@ export function createScrollPreservation(
       const container = getContainer();
       if (!container) return;
 
+      const topInset = Math.max(0, getTopInset());
       const bounds = container.getBoundingClientRect();
       const left = Math.max(0, bounds.left);
       const right = Math.min(page.innerWidth, bounds.right);
-      if (right <= left || bounds.bottom <= 0 || bounds.top >= page.innerHeight) return;
+      if (right <= left || bounds.bottom <= topInset || bounds.top >= page.innerHeight) return;
 
-      // Prefer the visible content at the top edge, including a partly visible comment.
-      const hit = document
-        .elementsFromPoint((left + right) / 2, 0)
-        .find((element) => container.contains(element) && element.closest(".comment"));
-      // The top edge can fall in a gap between comments.
+      // Prefer the visible content at the top reading edge (below any sticky mobile header).
+      const probeY = Math.min(page.innerHeight - 1, topInset + (topInset > 0 ? 4 : 0));
+      const hit =
+        typeof document.elementsFromPoint === "function"
+          ? document
+              .elementsFromPoint((left + right) / 2, probeY)
+              .find((element) => container.contains(element) && element.closest(".comment"))
+          : undefined;
+      // The top reading edge can fall in a gap between comments.
+      const comments = hit ? [] : Array.from(container.querySelectorAll(".comment"));
       const element =
         hit ??
-        Array.from(container.querySelectorAll(".comment")).find((comment) => {
+        comments.find((comment) => {
           const { top, bottom } = comment.getBoundingClientRect();
-          return bottom > top && top >= 0 && top < page.innerHeight;
+          return bottom > top && top >= topInset && top < page.innerHeight;
+        }) ??
+        comments.find((comment) => {
+          const { top, bottom } = comment.getBoundingClientRect();
+          return bottom > top && bottom > topInset && top < page.innerHeight;
         });
       if (element) anchor = { element, top: element.getBoundingClientRect().top };
     },

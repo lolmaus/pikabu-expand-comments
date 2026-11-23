@@ -297,3 +297,107 @@ section[data-role="answer"].section_gray {
 .pikabu-under-comments {
   height: 900px;
 }
+
+/* Mobile Pikabu (html.mv) layout fixture */
+html.mv .pikabu-shell {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  display: block;
+}
+
+html.mv .pikabu-main {
+  max-width: none;
+}
+
+html.mv .pikabu-sidebar {
+  display: none;
+}
+
+html.mv header.header {
+  position: sticky;
+  top: 0;
+  z-index: 5001;
+  height: 56px;
+  padding: 0 14px;
+  background: var(--color-bright-800);
+  border-bottom: 1px solid var(--color-black-430);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-black-940);
+}
+
+html.mv .story {
+  margin-bottom: 8px;
+  padding: 12px 16px;
+  border-inline: 0;
+  border-radius: 0;
+}
+
+html.mv .story-comments__menu {
+  height: 54px;
+  padding: 0 16px;
+  border-inline: 0;
+  border-radius: 0;
+  overflow-x: hidden;
+}
+
+html.mv .menu_horizontal {
+  line-height: 52px;
+}
+
+html.mv section.comments {
+  padding: 15px;
+  border-inline: 0;
+}
+
+html.mv .comment__more {
+  height: 36px;
+  line-height: 36px;
+}
+
+html.mv section[data-role="answer"].section_gray {
+  padding: 15px;
+  border-inline: 0;
+  border-radius: 0;
+}
+
+html.mv .story-action-bar {
+  position: fixed;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  z-index: 6001;
+  height: 44px;
+  padding: 0 16px;
+  border-radius: 22px;
+  background: var(--color-bright-800);
+  border: 1px solid var(--color-black-430);
+  box-shadow: var(--shadow-medium);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  color: var(--color-black-800);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+html.mv .pikabu-floor-ad {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2147483647;
+  height: 84px;
+  background: var(--color-black-440);
+  border-top: 1px solid var(--color-black-430);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-black-800);
+  font-size: 12px;
+  font-weight: 500;
+}

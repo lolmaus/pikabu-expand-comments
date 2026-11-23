@@ -6,16 +6,28 @@ import { installUserscript } from "./install-userscript.ts";
 
 export const VISUAL_THEMES = ["light", "dark"] as const;
 export type VisualTheme = (typeof VISUAL_THEMES)[number];
+export type VisualProfile = "desktop" | "mobile";
 
 export interface VisualViewport {
   name: string;
   width: number;
   height: number;
+  profile: VisualProfile;
 }
 
 export const VISUAL_VIEWPORTS: readonly VisualViewport[] = [
-  { name: "1280x800", width: 1280, height: 800 },
-  { name: "1024x800", width: 1024, height: 800 },
+  { name: "1280x800", width: 1280, height: 800, profile: "desktop" },
+  { name: "1024x800", width: 1024, height: 800, profile: "desktop" },
+];
+
+export const MOBILE_VISUAL_VIEWPORTS: readonly VisualViewport[] = [
+  { name: "390x844", width: 390, height: 844, profile: "mobile" },
+  { name: "412x915", width: 412, height: 915, profile: "mobile" },
+];
+
+export const ALL_VISUAL_VIEWPORTS: readonly VisualViewport[] = [
+  ...VISUAL_VIEWPORTS,
+  ...MOBILE_VISUAL_VIEWPORTS,
 ];
 
 export const VISUAL_POST_URL = "https://pikabu.ru/story/fixture_1";
@@ -201,26 +213,48 @@ export function contrastRatio(a: RgbaColor, b: RgbaColor): number {
   return Math.round(((lighter + 0.05) / (darker + 0.05)) * 100) / 100;
 }
 
-export function buildPikabuVisualHtml(theme: VisualTheme): string {
+export function buildPikabuVisualHtml(
+  theme: VisualTheme,
+  profile: VisualProfile = "desktop",
+  options?: { showFloorAd?: boolean },
+): string {
   const bodyMatch = postHtml.match(/<body>([\s\S]*)<\/body>/);
   const innerBody = bodyMatch?.[1] ?? "";
   const themeAttr = theme === "dark" ? ' data-theme-dark=""' : "";
+  const htmlClass = profile === "mobile" ? ' class="mv"' : "";
+  const headerMarkup =
+    profile === "mobile"
+      ? '<header class="header"><span>☰ Пост</span><span>Пикабу</span></header>'
+      : "";
+  const mobileChrome =
+    profile === "mobile"
+      ? `<div class="story-action-bar" aria-hidden="true"><span>▲ 4398 ▼</span><span>💬 10</span></div>${
+          options?.showFloorAd
+            ? '<div class="pikabu-floor-ad" aria-hidden="true">Yandex RTB Floor Ad</div>'
+            : ""
+        }`
+      : "";
   return `<!doctype html>
-<html lang="ru"${themeAttr}>
+<html lang="ru"${htmlClass}${themeAttr}>
   <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Тестовый пост — Pikabu Visual Audit</title>
     <link rel="stylesheet" href="/pikabu-theme.css" />
     <script src="/fixture.js" defer></script>
   </head>
   <body>
+    ${headerMarkup}
     <div class="pikabu-shell">
       <main class="pikabu-main">
-        ${innerBody}
+        <div class="story-comments">
+          ${innerBody}
+        </div>
         <div class="pikabu-under-comments" aria-hidden="true"></div>
       </main>
       <aside class="pikabu-sidebar" aria-label="Боковая колонка">Боковая колонка Pikabu</aside>
     </div>
+    ${mobileChrome}
   </body>
 </html>`;
 }
@@ -231,8 +265,10 @@ export async function preparePikabuVisualPage(
     theme: VisualTheme;
     viewport: VisualViewport;
     withUserscript: boolean;
+    showFloorAd?: boolean;
   },
 ): Promise<void> {
+  const profile = options.viewport.profile;
   await page.setViewportSize({ width: options.viewport.width, height: options.viewport.height });
   await page.emulateMedia({ colorScheme: options.theme, reducedMotion: "reduce" });
   await page.addInitScript(() => {
@@ -280,12 +316,31 @@ export async function preparePikabuVisualPage(
     (route) =>
       route.fulfill({
         contentType: "text/html; charset=utf-8",
-        body: buildPikabuVisualHtml(options.theme),
+        body: buildPikabuVisualHtml(
+          options.theme,
+          profile,
+          options.showFloorAd === undefined ? undefined : { showFloorAd: options.showFloorAd },
+        ),
       }),
   );
   if (options.withUserscript) {
     await installUserscript(page);
   }
+}
+
+export async function resetCls(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const tracker = (
+      window as unknown as Record<
+        string,
+        | { totalScore: number; entryCount: number; rawScore: number; rawEntryCount: number }
+        | undefined
+      >
+    )["__pikabuClsTracker"];
+    if (!tracker) return;
+    tracker.totalScore = 0;
+    tracker.entryCount = 0;
+  });
 }
 
 export async function measureTabBar(page: Page): Promise<TabBarSnapshot> {
@@ -311,7 +366,7 @@ export async function measureTabBar(page: Page): Promise<TabBarSnapshot> {
           Math.abs(m.bottom - borderBottom - activeTab.getBoundingClientRect().bottom) * 100,
         ) / 100
       : null;
-    const host = menu.querySelector<HTMLElement>('[data-pikabu-expand-comments="top"]');
+    const host = document.querySelector<HTMLElement>('[data-pikabu-expand-comments="top"]');
     const hostRect = host?.getBoundingClientRect();
     return {
       menu: {
@@ -774,6 +829,182 @@ export async function auditCurrentState(
     checkCls: options?.checkCls ?? true,
   });
   return { state, geometry, geometryDiff, cls, tokens, axe, contrast, p0 };
+}
+
+export interface MobileAuditReport {
+  topStripHeight: number | null;
+  bottomFooterHeight: number | null;
+  minTouchTarget: number | null;
+  popoverOverlapsTrigger: boolean;
+  popoverOverlapsAd: boolean;
+  floatingOverlapsAd: boolean;
+  expandedGears: number;
+  floatingRibbonVisible: boolean;
+  floatingDuplicatesInlineStop: boolean;
+  visibleStopCount: number;
+}
+
+export async function auditMobileState(page: Page): Promise<MobileAuditReport> {
+  return page.evaluate(() => {
+    const topHost = document.querySelector<HTMLElement>('[data-pikabu-expand-comments="top"]');
+    const topStripHeight = topHost ? Math.round(topHost.getBoundingClientRect().height) : null;
+    const bottomHost = document.querySelector<HTMLElement>(
+      '[data-pikabu-expand-comments="bottom"]',
+    );
+    const bottomBar = bottomHost?.shadowRoot?.querySelector<HTMLElement>(".bar");
+    const bottomFooterHeight =
+      bottomHost && !bottomHost.hidden && bottomBar
+        ? Math.round(bottomBar.getBoundingClientRect().height)
+        : null;
+    const header = document.querySelector<HTMLElement>("header.header");
+    const headerBottom = header ? Math.max(0, header.getBoundingClientRect().bottom) : 0;
+    const floorAd = document.querySelector<HTMLElement>(".pikabu-floor-ad");
+    const adRect = floorAd ? floorAd.getBoundingClientRect() : null;
+
+    const touchDims: number[] = [];
+    let popoverOverlapsTrigger = false;
+    let popoverOverlapsAd = false;
+    let floatingOverlapsAd = false;
+    let expandedGears = 0;
+    let floatingRibbonVisible = false;
+    let inlineStopVisibleCount = 0;
+    let visibleStopCount = 0;
+
+    for (const host of document.querySelectorAll<HTMLElement>("[data-pikabu-expand-comments]")) {
+      const shadow = host.shadowRoot;
+      if (!shadow || host.hidden) continue;
+
+      for (const el of shadow.querySelectorAll<HTMLElement>("button, .settings-option")) {
+        if (el.hidden || el.closest("[hidden]")) continue;
+        const r = el.getBoundingClientRect();
+        if (r.width <= 0 || r.height <= 0) continue;
+        touchDims.push(Math.min(Math.round(r.width), Math.round(r.height)));
+      }
+
+      const gear = shadow.querySelector<HTMLElement>('[data-role="settings"]');
+      const pop = shadow.querySelector<HTMLElement>("#expansion-settings");
+      if (gear?.getAttribute("aria-expanded") === "true") {
+        expandedGears += 1;
+        if (pop && !pop.hidden) {
+          const pr = pop.getBoundingClientRect();
+          const tr = gear.getBoundingClientRect();
+          if (pr.top < tr.bottom && pr.bottom > tr.top) popoverOverlapsTrigger = true;
+          if (adRect && pr.bottom > adRect.top && pr.top < adRect.bottom) popoverOverlapsAd = true;
+        }
+      }
+
+      const ribbon = shadow.querySelector<HTMLElement>('[data-role="floating-ribbon"]');
+      if (ribbon && !ribbon.hidden) {
+        floatingRibbonVisible = true;
+        if (adRect) {
+          const rr = ribbon.getBoundingClientRect();
+          if (rr.bottom > adRect.top && rr.top < adRect.bottom) floatingOverlapsAd = true;
+        }
+      }
+
+      for (const btn of shadow.querySelectorAll<HTMLButtonElement>("button")) {
+        if (btn.hidden || btn.closest("[hidden]")) continue;
+        if (!btn.textContent?.includes("Остановить")) continue;
+        const r = btn.getBoundingClientRect();
+        if (r.height > 0 && r.bottom > headerBottom && r.top < window.innerHeight) {
+          visibleStopCount += 1;
+          if (!btn.classList.contains("floating-stop")) {
+            inlineStopVisibleCount += 1;
+          }
+        }
+      }
+    }
+
+    return {
+      topStripHeight,
+      bottomFooterHeight,
+      minTouchTarget: touchDims.length > 0 ? Math.min(...touchDims) : null,
+      popoverOverlapsTrigger,
+      popoverOverlapsAd,
+      floatingOverlapsAd,
+      expandedGears,
+      floatingRibbonVisible,
+      floatingDuplicatesInlineStop: floatingRibbonVisible && inlineStopVisibleCount > 0,
+      visibleStopCount,
+    };
+  });
+}
+
+export function evaluateMobileP0Gates(
+  mobile: MobileAuditReport,
+  options?: { expectedExpandedGears?: number; expectFloatingRibbon?: boolean },
+): P0Failure[] {
+  const failures: P0Failure[] = [];
+  if (mobile.topStripHeight !== 56) {
+    failures.push({
+      gate: "geometry",
+      message: `mobile topStripHeight=${mobile.topStripHeight}px (expected 56px)`,
+    });
+  }
+  if (mobile.bottomFooterHeight !== null && mobile.bottomFooterHeight !== 56) {
+    failures.push({
+      gate: "geometry",
+      message: `mobile bottomFooterHeight=${mobile.bottomFooterHeight}px (expected 56px)`,
+    });
+  }
+  if (mobile.minTouchTarget !== null && mobile.minTouchTarget < 44) {
+    failures.push({
+      gate: "geometry",
+      message: `mobile minTouchTarget=${mobile.minTouchTarget}px (expected >= 44px)`,
+    });
+  }
+  if (mobile.popoverOverlapsTrigger) {
+    failures.push({
+      gate: "geometry",
+      message: "mobile settings popover overlaps its gear trigger",
+    });
+  }
+  if (mobile.popoverOverlapsAd) {
+    failures.push({
+      gate: "geometry",
+      message: "mobile settings popover overlaps the floor ad",
+    });
+  }
+  if (mobile.floatingOverlapsAd) {
+    failures.push({
+      gate: "geometry",
+      message: "mobile floating progress ribbon overlaps the floor ad",
+    });
+  }
+  if (options?.expectedExpandedGears !== undefined) {
+    if (mobile.expandedGears !== options.expectedExpandedGears) {
+      failures.push({
+        gate: "geometry",
+        message: `mobile expandedGears=${mobile.expandedGears} (expected ${options.expectedExpandedGears})`,
+      });
+    }
+  } else if (mobile.expandedGears > 1) {
+    failures.push({
+      gate: "geometry",
+      message: `mobile expandedGears=${mobile.expandedGears} (expected <= 1)`,
+    });
+  }
+  if (mobile.floatingDuplicatesInlineStop) {
+    failures.push({
+      gate: "geometry",
+      message: "mobile floating ribbon visible alongside an inline Stop control",
+    });
+  }
+  if (options?.expectFloatingRibbon !== undefined) {
+    if (mobile.floatingRibbonVisible !== options.expectFloatingRibbon) {
+      failures.push({
+        gate: "geometry",
+        message: `mobile floatingRibbonVisible=${mobile.floatingRibbonVisible} (expected ${options.expectFloatingRibbon})`,
+      });
+    }
+    if (options.expectFloatingRibbon && mobile.visibleStopCount !== 1) {
+      failures.push({
+        gate: "geometry",
+        message: `mobile visibleStopCount=${mobile.visibleStopCount} (expected 1)`,
+      });
+    }
+  }
+  return failures;
 }
 
 export function assertLightDarkTokenParity(

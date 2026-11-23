@@ -1,5 +1,12 @@
 import { expect, test, vi } from "vitest";
-import { findScrollToBottomTarget, mountBottomHost, observeCommentView } from "./comment-view.ts";
+import {
+  detectPostPageLayout,
+  findScrollToBottomTarget,
+  measureStickyTopInset,
+  mountBottomHost,
+  mountTopHost,
+  observeCommentView,
+} from "./comment-view.ts";
 
 test("observes the selected tab and replacement menu or comment list", async () => {
   document.body.innerHTML = `
@@ -153,4 +160,53 @@ test("mounts bottom controls inside section.comments after .comments__container 
     element: document.querySelector('section[data-role="answer"]'),
     block: "center",
   });
+});
+
+test("detects mobile html.mv layout, mounts top controls after the menu, and measures sticky top chrome", () => {
+  document.documentElement.classList.add("mv");
+  document.body.innerHTML = `
+    <div class="promo-banner" style="position: sticky; top: 0"></div>
+    <header class="header" style="position: sticky; top: 56px"></header>
+    <div class="story-comments">
+      <section class="story-comments__menu">
+        <a class="menu__item_current" data-id="all" href="#comments">Все комментарии</a>
+      </section>
+      <div class="story-comments__all">
+        <section class="comments">
+          <div class="comments__container"><div class="comment">Комментарий</div></div>
+        </section>
+      </div>
+    </div>
+  `;
+  const promo = document.querySelector<HTMLElement>(".promo-banner")!;
+  const header = document.querySelector<HTMLElement>("header.header")!;
+  vi.spyOn(promo, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 390, 56));
+  vi.spyOn(header, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 56, 390, 56));
+
+  const changed = vi.fn();
+  const stop = observeCommentView(window, changed);
+  try {
+    expect(detectPostPageLayout(document)).toBe("mobile");
+    const view = changed.mock.calls.at(-1)?.[0];
+    expect(view).toMatchObject({ layout: "mobile", tabKind: "all" });
+
+    const topHost = document.createElement("div");
+    mountTopHost(view, topHost);
+    expect(view.menu.contains(topHost)).toBe(false);
+    expect(view.menu.nextElementSibling).toBe(topHost);
+
+    expect(measureStickyTopInset(document, window)).toBe(112);
+
+    // Promo banner slides offscreen while header stays sticky at 0..56.
+    vi.spyOn(promo, "getBoundingClientRect").mockReturnValue(new DOMRect(0, -56, 390, 56));
+    vi.spyOn(header, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 390, 56));
+    expect(measureStickyTopInset(document, window)).toBe(56);
+
+    // Non-sticky desktop headers contribute 0 inset.
+    header.style.position = "static";
+    expect(measureStickyTopInset(document, window)).toBe(0);
+  } finally {
+    stop();
+    document.documentElement.classList.remove("mv");
+  }
 });
