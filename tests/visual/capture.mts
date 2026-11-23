@@ -142,6 +142,7 @@ async function runCaptureForCombo(
 
   // 03. Running + 04. Floating stop
   await start.click();
+  await page.mouse.move(0, 0);
   await top.getByRole("button", { name: "Остановить" }).waitFor({ state: "visible" });
   states.push(await auditCurrentState(page, "03-running", baseline, { checkCls: false }));
   await captureTopHeader(page, rel("03-running.png"));
@@ -156,10 +157,12 @@ async function runCaptureForCombo(
     }
     window.scrollTo(0, 700);
   });
-  await page.waitForTimeout(50);
+  const floatingStop = top.locator("button.floating-stop");
+  await floatingStop.waitFor({ state: "visible" });
   states.push(
     await auditCurrentState(page, "04-running-floating-stop", baseline, { checkCls: false }),
   );
+  await floatingStop.waitFor({ state: "visible" });
   await page.screenshot({ path: rel("04-running-floating-stop.png") });
   await page.evaluate(() => {
     document.getElementById("visual-capture-spacer")?.remove();
@@ -168,6 +171,7 @@ async function runCaptureForCombo(
 
   // 05. Stopped
   await top.getByRole("button", { name: "Остановить" }).first().click();
+  await page.mouse.move(0, 0);
   await top.getByRole("button", { name: "Продолжить" }).waitFor({ state: "visible" });
   states.push(await auditCurrentState(page, "05-stopped", baseline, { checkCls: false }));
   await captureTopHeader(page, rel("05-stopped.png"));
@@ -175,6 +179,7 @@ async function runCaptureForCombo(
   // Release and finish to 07. Completed all
   holdBranch.resolve();
   await top.getByRole("button", { name: "Продолжить" }).click();
+  await page.mouse.move(0, 0);
   await top.getByRole("status").filter({ hasText: "Все комментарии раскрыты." }).waitFor();
   states.push(await auditCurrentState(page, "07-completed-all", baseline, { checkCls: false }));
   await captureTopHeader(page, rel("07-completed-all.png"));

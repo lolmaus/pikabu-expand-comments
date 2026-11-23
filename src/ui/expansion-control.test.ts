@@ -54,9 +54,7 @@ test("presents the Russian action, counter, scroll button, and status inside the
   expect(start).toHaveBeenCalledTimes(2);
 
   render({ ...metrics, state: "error" });
-  expect(status.textContent).toBe(
-    "Не удалось загрузить часть комментариев. Можно попробовать ещё раз.",
-  );
+  expect(status.textContent).toBe("Ошибка загрузки комментариев.");
   expect(button.textContent).toBe("Повторить");
   expect(button.hidden).toBe(false);
   button.click();
@@ -260,16 +258,17 @@ test("discloses the saved preference and restores it if saving fails", async () 
   );
   const shadow = menu.firstElementChild!.shadowRoot!;
   const settings = shadow.querySelector<HTMLButtonElement>("[aria-controls]")!;
+  const popover = shadow.querySelector<HTMLElement>("#expansion-settings")!;
   const checkbox = shadow.querySelector<HTMLInputElement>("input")!;
   const label = checkbox.closest("label")!;
-  expect(settings.textContent).toBe("Настройки");
+  expect(settings.getAttribute("aria-label")).toBe("Настройки");
   expect(settings.getAttribute("aria-expanded")).toBe("false");
-  expect(label.hidden).toBe(true);
+  expect(popover.hidden).toBe(true);
 
   settings.click();
   await savedPreference;
   expect(settings.getAttribute("aria-expanded")).toBe("true");
-  expect(label.hidden).toBe(false);
+  expect(popover.hidden).toBe(false);
   expect(label.textContent?.trim()).toBe("Раскрывать комментарии при открытии поста");
   expect(checkbox.checked).toBe(false);
 
@@ -283,5 +282,12 @@ test("discloses the saved preference and restores it if saving fails", async () 
 
   settings.click();
   expect(settings.getAttribute("aria-expanded")).toBe("false");
-  expect(label.hidden).toBe(true);
+  expect(popover.hidden).toBe(true);
+
+  settings.click();
+  expect(popover.hidden).toBe(false);
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+  expect(settings.getAttribute("aria-expanded")).toBe("false");
+  expect(popover.hidden).toBe(true);
+  expect(shadow.activeElement).toBe(settings);
 });

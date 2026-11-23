@@ -4,58 +4,66 @@ import {
   VISUAL_THEMES,
   VISUAL_VIEWPORTS,
   assertLightDarkTokenParity,
-  auditAxe,
   auditCurrentState,
-  auditPikabuTokens,
-  auditShadowContrast,
   evaluateP0Gates,
   measureTabBar,
   preparePikabuVisualPage,
   type TokenAuditReport,
 } from "../support/visual-audit.ts";
 
-test("resolves Pikabu light and dark tokens, passes axe-core, has no page overflow, and meets Shadow DOM text contrast", async ({
+test("passes all P0 visual, geometry, token, axe-core, and Shadow DOM contrast gates in light and dark themes", async ({
   browser,
 }) => {
   for (const viewport of VISUAL_VIEWPORTS) {
     const tokensByTheme: Partial<Record<(typeof VISUAL_THEMES)[number], TokenAuditReport>> = {};
 
     for (const theme of VISUAL_THEMES) {
+      const baselineContext = await browser.newContext();
+      const baselinePage = await baselineContext.newPage();
+      await preparePikabuVisualPage(baselinePage, { theme, viewport, withUserscript: false });
+      await baselinePage.goto(VISUAL_POST_URL);
+      const baseline = await measureTabBar(baselinePage);
+      await baselineContext.close();
+
       const context = await browser.newContext();
       const page = await context.newPage();
       await preparePikabuVisualPage(page, { theme, viewport, withUserscript: true });
       await page.goto(VISUAL_POST_URL);
-      await expect(
-        page
-          .locator(".story-comments__menu")
-          .getByRole("button", { name: "Раскрыть все комментарии" }),
-      ).toBeVisible();
+      const menu = page.locator(".story-comments__menu");
+      await expect(menu.getByRole("button", { name: "Раскрыть все комментарии" })).toBeVisible();
 
-      const tokens = await auditPikabuTokens(page);
-      expect(tokens.emptyTokens, `Empty Pikabu CSS tokens (${theme} ${viewport.name})`).toEqual([]);
-      tokensByTheme[theme] = tokens;
-
-      const tabBar = await measureTabBar(page);
-      expect(tabBar.page.scrollWidth).toBeLessThanOrEqual(tabBar.page.innerWidth);
-
-      const axe = await auditAxe(page);
-      expect(Array.isArray(axe.violations)).toBe(true);
-      expect(Array.isArray(axe.incomplete)).toBe(true);
-      // Pre-redesign baseline only has the known scroll-to-bottom label-content-name-mismatch;
-      // zero unexpected WCAG violations are allowed on main (strict 0-violation gate runs in `pnpm run ui:audit`).
-      const unexpectedAxeViolations = axe.violations.filter(
-        (finding) => finding.id !== "label-content-name-mismatch",
-      );
-      expect(
-        unexpectedAxeViolations,
-        `Unexpected axe-core violations (${theme} ${viewport.name})`,
-      ).toEqual([]);
-
-      const contrast = await auditShadowContrast(page);
-      const textFailures = contrast.failures.filter((sample) => sample.kind === "text");
-      expect(textFailures, `Shadow DOM text contrast failures (${theme} ${viewport.name})`).toEqual(
+      const idle = await auditCurrentState(page, "idle", baseline, { checkCls: true });
+      expect(idle.p0.failures, `P0 failures (${theme} ${viewport.name} idle)`).toEqual([]);
+      expect(idle.axe.incomplete, `axe-core incomplete (${theme} ${viewport.name} idle)`).toEqual(
         [],
       );
+      tokensByTheme[theme] = idle.tokens;
+
+      const settingsButton = menu.getByRole("button", { name: "Настройки" });
+      await settingsButton.click();
+      await expect(
+        menu.getByRole("checkbox", { name: "Раскрывать комментарии при открытии поста" }),
+      ).toBeVisible();
+      const settingsOpen = await auditCurrentState(page, "settings-open", baseline, {
+        checkCls: true,
+      });
+      expect(
+        settingsOpen.p0.failures,
+        `P0 failures (${theme} ${viewport.name} settings-open)`,
+      ).toEqual([]);
+      expect(
+        settingsOpen.axe.incomplete,
+        `axe-core incomplete (${theme} ${viewport.name} settings-open)`,
+      ).toEqual([]);
+
+      await page.keyboard.press("Escape");
+      const settingsClosed = await auditCurrentState(page, "settings-closed", baseline, {
+        checkCls: true,
+      });
+      expect(
+        settingsClosed.p0.failures,
+        `P0 failures (${theme} ${viewport.name} settings-closed)`,
+      ).toEqual([]);
 
       await context.close();
     }
