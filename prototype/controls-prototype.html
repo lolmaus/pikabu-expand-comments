@@ -515,6 +515,12 @@
   <body>
     <div class="proto-controls" role="region" aria-label="Prototype controls">
       <div class="proto-group">
+        <strong>Variant:</strong>
+        <button class="proto-chip" data-variant="A" aria-pressed="true">A: Compact Strip</button>
+        <button class="proto-chip" data-variant="B" aria-pressed="false">B: Segmented Pill</button>
+        <button class="proto-chip" data-variant="C" aria-pressed="false">C: Quiet Inline</button>
+      </div>
+      <div class="proto-group">
         <strong>Theme:</strong>
         <button class="proto-chip" data-theme="light" aria-pressed="true">Light</button>
         <button class="proto-chip" data-theme="dark" aria-pressed="false">Dark</button>
@@ -775,10 +781,30 @@
           });
         });
 
-        const url = new URL(location.href);
-        url.searchParams.set("variant", variant.key);
-        history.replaceState(null, "", url);
+        document
+          .querySelectorAll("[data-variant]")
+          .forEach((b) =>
+            b.setAttribute("aria-pressed", String(b.getAttribute("data-variant") === variant.key)),
+          );
+
+        try {
+          const url = new URL(location.href);
+          url.searchParams.set("variant", variant.key);
+          history.replaceState(null, "", url);
+        } catch {
+          // Ignore SecurityError when opened via file:// or sandboxed preview.
+        }
       }
+
+      document.querySelectorAll("[data-variant]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const idx = VARIANTS.findIndex((v) => v.key === btn.getAttribute("data-variant"));
+          if (idx >= 0) {
+            variantIdx = idx;
+            render();
+          }
+        });
+      });
 
       document.addEventListener("click", (e) => {
         if (!popover.hidden && !popover.contains(e.target)) closePopover();
