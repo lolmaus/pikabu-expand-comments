@@ -1,0 +1,1207 @@
+<!doctype html>
+<!--
+  PROTOTYPE — Throwaway interactive UI prototype for Wayfinder Ticket #36 (Round 2 — Critic-refined)
+  "Refined Variant B (Zero-CLS Single-Row 56px Companion Strip + Top-Docked Progress Ribbon)
+   and Refined Variant A (Zero-CLS Single-Row Strip + Elevated Top-Right Floating Pill)
+   inside an authentic mobile Pikabu shell using exact real Pikabu light/dark tokens at 390×844 & 412×915."
+-->
+<html lang="ru" class="mv">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Prototype (Round 2) — Mobile Pikabu Controls &amp; Floating Stop (#36)</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --canvas-bg: #e6e9f0;
+        /* Exact REAL Pikabu mobile/desktop light tokens (zero custom overrides) */
+        --color-black-300: #f7f8fc;
+        --color-bright-800: #fcfdff;
+        --color-black-430: #ebedf2;
+        --color-black-440: #e7e8ea;
+        --color-black-940: #1b1e24;
+        --color-black-800: #444850;
+        --color-black-700: #70737b;
+        --color-primary-900: #65ab3c;
+        --color-primary-700: #8bca58;
+        --color-primary-100: #f8fff2;
+        --color-danger-800: #f75c48;
+        --shadow-medium: 0 4px 20px 0 rgba(0, 0, 0, 0.08);
+        --c-btn-secondary-bgDefault: #dcdee5;
+        --c-btn-secondary-bgHover: #ced1d9;
+        --c-btnIcon-primary-bgHover: rgba(31, 32, 33, 0.08);
+        --c-btnIcon-primary-bgClick: rgba(31, 32, 33, 0.16);
+        --c-counter-bgTertiary: #f2f3f7;
+        --focus-ring: color-mix(in srgb, var(--color-primary-900) 76%, var(--color-black-940));
+        --error-text: color-mix(in srgb, var(--color-danger-800) 58%, var(--color-black-940));
+        --m-btn-bg: var(--color-black-440);
+        --m-btn-bg-hover: var(--c-btn-secondary-bgDefault);
+        --m-btn-bg-active: var(--c-btn-secondary-bgHover);
+        --chip-active-bg: #498228;
+      }
+
+      :root[data-theme-dark] {
+        color-scheme: dark;
+        --canvas-bg: #141518;
+        /* Exact REAL Pikabu mobile/desktop dark tokens (zero custom overrides) */
+        --color-black-300: #222326;
+        --color-bright-800: #292a2e;
+        --color-black-430: #37393d;
+        --color-black-440: #2d3236;
+        --color-black-940: #e0e3ea;
+        --color-black-800: #b9bdc7;
+        --color-black-700: #8f939d;
+        --color-primary-900: #618f45;
+        --color-primary-700: #638c47;
+        --color-primary-100: #282f2e;
+        --color-danger-800: #ca4533;
+        --shadow-medium: 0 4px 20px 0 rgba(0, 0, 0, 0.24);
+        --c-btn-secondary-bgDefault: #45474d;
+        --c-btn-secondary-bgHover: #5e6066;
+        --c-btnIcon-primary-bgHover: rgba(255, 255, 255, 0.08);
+        --c-btnIcon-primary-bgClick: rgba(255, 255, 255, 0.16);
+        --c-counter-bgTertiary: #45474d;
+        --focus-ring: color-mix(in srgb, var(--color-primary-900) 76%, var(--color-black-940));
+        --error-text: #ff9b8c;
+        --m-btn-bg: color-mix(in srgb, var(--color-black-440) 68%, var(--c-btn-secondary-bgDefault));
+        --m-btn-bg-hover: var(--c-btn-secondary-bgDefault);
+        --m-btn-bg-active: var(--c-btn-secondary-bgHover);
+        --chip-active-bg: #3e6e22;
+      }
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        padding: 16px 12px 84px;
+        background: var(--canvas-bg);
+        color: var(--color-black-940);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-size: 14px;
+        line-height: 1.45;
+      }
+
+      body[data-capture="1"] .proto-switcher,
+      body[data-capture="1"] .controls-bar,
+      body[data-capture="1"] .rationale {
+        display: none;
+      }
+
+      .harness {
+        max-width: 980px;
+        margin: 0 auto;
+        display: grid;
+        gap: 14px;
+      }
+
+      .controls-bar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px 14px;
+        padding: 10px 14px;
+        border-radius: 12px;
+        background: var(--color-bright-800);
+        border: 1px solid var(--color-black-430);
+      }
+
+      .ctrl-group {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 5px;
+      }
+
+      .ctrl-label {
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--color-black-800);
+      }
+
+      .chip {
+        height: 26px;
+        padding: 0 9px;
+        border-radius: 6px;
+        border: 1px solid var(--color-black-430);
+        background: var(--color-black-300);
+        color: var(--color-black-800);
+        font: inherit;
+        font-size: 11px;
+        font-weight: 500;
+        cursor: pointer;
+        touch-action: manipulation;
+      }
+
+      .chip[aria-pressed="true"] {
+        background: var(--chip-active-bg);
+        border-color: var(--chip-active-bg);
+        color: #ffffff;
+      }
+
+      .rationale {
+        margin: 0;
+        font-size: 12px;
+        color: var(--color-black-800);
+      }
+
+      .phone-wrap {
+        display: flex;
+        justify-content: center;
+      }
+
+      .phone-viewport {
+        width: 390px;
+        height: 844px;
+        background: var(--color-black-300);
+        border: 1px solid var(--color-black-430);
+        border-radius: 18px;
+        box-shadow: var(--shadow-medium);
+        position: relative;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .phone-viewport[data-width="412"] {
+        width: 412px;
+        height: 915px;
+      }
+
+      /* Authentic mobile Pikabu sticky header (56px, z-index 5001) */
+      .pkb-header {
+        position: sticky;
+        top: 0;
+        z-index: 5001;
+        height: 56px;
+        flex: 0 0 56px;
+        padding: 0 14px;
+        background: var(--color-bright-800);
+        border-bottom: 1px solid var(--color-black-430);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+
+      .pkb-header-left {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 17px;
+        font-weight: 600;
+        color: var(--color-black-940);
+      }
+
+      .pkb-logo-dot {
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #f5a623, #d95b26);
+        display: inline-block;
+      }
+
+      .pkb-login-btn {
+        height: 32px;
+        padding: 0 14px;
+        border-radius: 8px;
+        background: #89cc52;
+        color: #1b1e24;
+        font-size: 13px;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+      }
+
+      .phone-scroll {
+        flex: 1 1 auto;
+        overflow-y: auto;
+        overflow-x: hidden;
+        position: relative;
+        background: var(--color-black-300);
+      }
+
+      .story-stub {
+        background: var(--color-bright-800);
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--color-black-430);
+        margin-bottom: 8px;
+        font-size: 13px;
+        color: var(--color-black-700);
+      }
+
+      .story-comments {
+        background: var(--color-bright-800);
+      }
+
+      /* Authentic mobile .story-comments__menu (54px, untouched!) */
+      .story-comments__menu {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 16px;
+        height: 54px;
+        overflow-x: hidden;
+        background: var(--color-bright-800);
+        border-bottom: 1px solid var(--color-black-430);
+      }
+
+      .menu_horizontal {
+        display: flex;
+        align-items: center;
+        gap: 20px;
+        height: 54px;
+        width: 100%;
+        white-space: nowrap;
+      }
+
+      .menu__item {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        height: 54px;
+        font-size: 15px;
+        font-weight: 500;
+        color: var(--color-black-700);
+        text-decoration: none;
+      }
+
+      .menu__item_current {
+        color: var(--color-primary-900);
+      }
+
+      .menu__item_current::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: 2px;
+        background: var(--color-primary-900);
+      }
+
+      section.comments {
+        padding: 15px;
+        background: var(--color-bright-800);
+      }
+
+      .comment-item {
+        padding-bottom: 14px;
+        margin-bottom: 14px;
+        border-bottom: 1px solid var(--color-black-430);
+      }
+
+      .comment-meta {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 6px;
+        font-size: 13px;
+      }
+
+      .comment-avatar {
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        background: var(--color-black-440);
+      }
+
+      .comment-author {
+        font-weight: 600;
+        color: var(--color-black-940);
+      }
+
+      .comment-time {
+        color: var(--color-black-700);
+        font-size: 12px;
+      }
+
+      .comment-text {
+        margin: 0 0 8px;
+        font-size: 15px;
+        line-height: 1.45;
+        color: var(--color-black-940);
+      }
+
+      .comment-branch {
+        font-size: 13px;
+        color: var(--color-black-700);
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .branch-plus {
+        width: 14px;
+        height: 14px;
+        border-radius: 3px;
+        background: var(--color-primary-900);
+        color: #ffffff;
+        font-size: 11px;
+        line-height: 14px;
+        text-align: center;
+        font-weight: 700;
+      }
+
+      .comment__more {
+        width: 100%;
+        height: 36px;
+        border: 0;
+        border-radius: 8px;
+        background: var(--color-black-440);
+        color: var(--color-black-700);
+        font: inherit;
+        font-size: 13px;
+        font-weight: 500;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .answer-section {
+        margin-top: 1px;
+        background: var(--color-bright-800);
+        border-top: 1px solid var(--color-black-430);
+        padding: 14px 16px 24px;
+      }
+
+      .answer-box {
+        color: var(--color-black-700);
+        font-size: 14px;
+        padding-bottom: 14px;
+        border-bottom: 1px solid var(--color-black-430);
+        margin-bottom: 12px;
+      }
+
+      .answer-btn {
+        height: 36px;
+        padding: 0 18px;
+        border-radius: 18px;
+        background: #89cc52;
+        color: #1b1e24;
+        font-size: 14px;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+      }
+
+      .pkb-action-bar {
+        position: absolute;
+        left: 50%;
+        bottom: 16px;
+        transform: translateX(-50%);
+        z-index: 6001;
+        height: 44px;
+        padding: 0 16px;
+        border-radius: 22px;
+        background: var(--color-bright-800);
+        border: 1px solid var(--color-black-430);
+        box-shadow: var(--shadow-medium);
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        font-size: 13px;
+        color: var(--color-black-800);
+        white-space: nowrap;
+      }
+
+      .pkb-floor-ad {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 7000;
+        height: 84px;
+        background: repeating-linear-gradient(
+          -45deg,
+          rgba(128, 128, 128, 0.16),
+          rgba(128, 128, 128, 0.16) 8px,
+          rgba(128, 128, 128, 0.24) 8px,
+          rgba(128, 128, 128, 0.24) 16px
+        );
+        background-color: var(--color-black-440);
+        border-top: 1px solid var(--color-black-430);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--color-black-800);
+      }
+
+      /* ===========================================================
+         REFINED MOBILE CONTROLS (Zero-CLS 56px single row + 36px painted / 44px hit)
+         =========================================================== */
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+      }
+
+      .m-top-strip {
+        height: 56px;
+        padding: 6px 16px;
+        background: var(--color-bright-800);
+        border-bottom: 1px solid var(--color-black-430);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 6px;
+        min-width: 0;
+      }
+
+      .m-bottom-footer {
+        margin-top: 14px;
+        padding-top: 8px;
+        border-top: 1px solid var(--color-black-430);
+        height: 56px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 6px;
+        min-width: 0;
+      }
+
+      .m-left {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+        flex: 1 1 auto;
+      }
+
+      .m-right {
+        display: flex;
+        align-items: center;
+        gap: 0;
+        flex: 0 0 auto;
+        margin-right: -8px;
+      }
+
+      /* 44px touch target painting a crisp 36px / 8px-radius Pikabu-native button */
+      .m-btn {
+        box-sizing: border-box;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        min-width: 0;
+        min-height: 44px;
+        padding: 0 12px;
+        border: 4px solid transparent;
+        border-radius: 12px;
+        background: var(--m-btn-bg);
+        background-clip: padding-box;
+        color: var(--color-black-940);
+        font: inherit;
+        font-size: 13px;
+        font-weight: 500;
+        line-height: 16px;
+        white-space: nowrap;
+        flex: 0 0 auto;
+        cursor: pointer;
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
+        transition: background-color 150ms ease;
+      }
+
+      .m-left > .m-btn:first-child {
+        margin-left: -4px;
+      }
+
+      .m-btn:hover {
+        background: var(--m-btn-bg-hover);
+        background-clip: padding-box;
+      }
+
+      .m-btn:active {
+        background: var(--m-btn-bg-active);
+        background-clip: padding-box;
+      }
+
+      .m-icon-btn {
+        box-sizing: border-box;
+        width: 44px;
+        height: 44px;
+        padding: 0;
+        border: 0;
+        border-radius: 10px;
+        background: transparent;
+        color: var(--color-black-800);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 auto;
+        cursor: pointer;
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
+        transition: background-color 150ms ease;
+      }
+
+      .m-icon-btn:hover,
+      .m-icon-btn[aria-expanded="true"] {
+        background: var(--c-btnIcon-primary-bgHover);
+        color: var(--color-black-940);
+      }
+
+      .m-icon-btn:active {
+        background: var(--c-btnIcon-primary-bgClick);
+      }
+
+      .m-btn:focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: -2px;
+      }
+
+      .m-icon-btn:focus-visible,
+      .m-floating-pill:focus-visible,
+      .m-settings-opt input:focus-visible {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
+      }
+
+      /* Uses real Pikabu --c-counter-bgTertiary + --color-black-800 (>= 4.9:1 light & dark) */
+      .m-counter {
+        display: inline-flex;
+        align-items: center;
+        height: 24px;
+        padding: 0 8px;
+        border-radius: 12px;
+        background: var(--c-counter-bgTertiary);
+        color: var(--color-black-800);
+        font-size: 12px;
+        font-weight: 500;
+        line-height: 16px;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+        flex: 0 0 auto;
+      }
+
+      .m-inline-text {
+        font-size: 13px;
+        line-height: 18px;
+        color: var(--color-black-800);
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .m-inline-text[data-error="true"] {
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--error-text);
+      }
+
+      .m-stop-sq {
+        width: 9px;
+        height: 9px;
+        border-radius: 2px;
+        background: var(--error-text);
+        flex: 0 0 auto;
+      }
+
+      /* Variant B Floating Stop: Full-Width Top-Docked Progress Ribbon (flush below sticky header) */
+      .m-floating-ribbon {
+        position: absolute;
+        top: 56px; /* dynamic Math.max(0, headerRect.bottom) in prod */
+        left: 0;
+        right: 0;
+        z-index: 6500;
+        min-height: 48px;
+        padding: 2px max(12px, env(safe-area-inset-right)) 2px max(16px, env(safe-area-inset-left));
+        background: var(--color-bright-800);
+        border-bottom: 1px solid var(--color-black-430);
+        box-shadow: var(--shadow-medium);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+
+      .m-ribbon-meta {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+      }
+
+      .m-ribbon-label {
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--color-black-940);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      /* Variant A Floating Stop: Compact Elevated Top-Right Pill (matching native .pkb-action-bar surface) */
+      .m-floating-pill {
+        position: absolute;
+        top: 64px; /* dynamic Math.max(0, headerRect.bottom) + 8px */
+        right: max(12px, env(safe-area-inset-right));
+        z-index: 6500;
+        min-height: 44px;
+        padding: 0 14px;
+        border: 1px solid var(--color-black-430);
+        border-radius: 22px;
+        background: var(--color-bright-800);
+        color: var(--color-black-940);
+        box-shadow: var(--shadow-medium);
+        font: inherit;
+        font-size: 13px;
+        font-weight: 500;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
+        transition: background-color 150ms ease;
+      }
+
+      .m-floating-pill:hover {
+        background: var(--color-black-300);
+      }
+
+      .m-floating-pill:active {
+        background: var(--color-black-440);
+      }
+
+      /* Top-layer settings popover anchored cleanly below gear trigger */
+      .m-popover {
+        position: absolute;
+        z-index: 8000;
+        width: min(312px, calc(100% - 24px));
+        padding: 6px;
+        border-radius: 10px;
+        background: var(--color-bright-800);
+        border: 1px solid var(--color-black-430);
+        box-shadow: var(--shadow-medium);
+        overscroll-behavior: contain;
+      }
+
+      .m-settings-opt {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-height: 44px;
+        padding: 8px 10px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 13px;
+        line-height: 18px;
+        color: var(--color-black-940);
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
+      }
+
+      .m-settings-opt:hover {
+        background: var(--c-btnIcon-primary-bgHover);
+      }
+
+      .m-settings-opt input {
+        width: 18px;
+        height: 18px;
+        margin: 0;
+        accent-color: var(--color-primary-900);
+        flex: 0 0 auto;
+      }
+
+      .proto-switcher {
+        position: fixed;
+        left: 50%;
+        bottom: 14px;
+        transform: translateX(-50%);
+        z-index: 9999;
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 6px 10px;
+        border-radius: 999px;
+        background: #1b1e24;
+        color: #f7f8fc;
+        box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28);
+        font-size: 13px;
+        font-weight: 500;
+      }
+
+      .proto-switcher button {
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        border: 0;
+        background: rgba(255, 255, 255, 0.14);
+        color: #ffffff;
+        cursor: pointer;
+      }
+
+      .proto-switcher-label {
+        min-width: 240px;
+        text-align: center;
+        white-space: nowrap;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          transition: none !important;
+          animation: none !important;
+        }
+      }
+
+      [hidden] {
+        display: none !important;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="harness">
+      <div class="controls-bar" role="region" aria-label="Параметры мобильного прототипа">
+        <div class="ctrl-group">
+          <span class="ctrl-label">Тема:</span>
+          <button type="button" class="chip" data-theme="light" aria-pressed="true">Светлая</button>
+          <button type="button" class="chip" data-theme="dark" aria-pressed="false">Тёмная</button>
+        </div>
+        <div class="ctrl-group">
+          <span class="ctrl-label">Ширина:</span>
+          <button type="button" class="chip" data-w="390" aria-pressed="true">390×844</button>
+          <button type="button" class="chip" data-w="412" aria-pressed="false">412×915</button>
+        </div>
+        <div class="ctrl-group">
+          <span class="ctrl-label">Состояние:</span>
+          <button type="button" class="chip" data-st="idle" aria-pressed="true">idle</button>
+          <button type="button" class="chip" data-st="running" aria-pressed="false">running</button>
+          <button type="button" class="chip" data-st="stopped" aria-pressed="false">stopped</button>
+          <button type="button" class="chip" data-st="completed" aria-pressed="false">completed</button>
+          <button type="button" class="chip" data-st="error" aria-pressed="false">error</button>
+        </div>
+        <div class="ctrl-group">
+          <span class="ctrl-label">Вид:</span>
+          <button type="button" class="chip" data-view="top" aria-pressed="true">Верх</button>
+          <button type="button" class="chip" data-view="floating" aria-pressed="false">
+            Floating Stop
+          </button>
+          <button type="button" class="chip" data-view="bottom" aria-pressed="false">Низ</button>
+          <button type="button" class="chip" data-pop="1" aria-pressed="false">Настройки</button>
+          <button type="button" class="chip" data-ad="1" aria-pressed="false">Floor Ad</button>
+        </div>
+      </div>
+
+      <p class="rationale" id="rationale"></p>
+
+      <div class="phone-wrap">
+        <div class="phone-viewport" id="phone-viewport" data-width="390">
+          <header class="pkb-header" id="pkb-header" aria-label="Pikabu header">
+            <div class="pkb-header-left">
+              <span aria-hidden="true">☰</span>
+              <span class="pkb-logo-dot" aria-hidden="true"></span>
+              <span>Пост</span>
+            </div>
+            <span class="pkb-login-btn">Вход</span>
+          </header>
+
+          <div class="phone-scroll" id="phone-scroll">
+            <div class="story-stub">… текст поста · 1710 комментариев</div>
+
+            <div class="story-comments" id="story-comments">
+              <section class="story-comments__menu" id="comments-menu">
+                <div class="menu_horizontal">
+                  <a class="menu__item menu__item_current" href="#all">Все комментарии</a>
+                  <a class="menu__item" href="#author">Автора</a>
+                </div>
+              </section>
+
+              <div id="top-companion-slot"></div>
+
+              <section class="comments" id="comments-section">
+                <div class="comments__container" id="comments-container"></div>
+                <div id="bottom-controls-slot"></div>
+              </section>
+            </div>
+
+            <section class="answer-section" data-role="answer">
+              <div class="answer-box">Введите текст комментария</div>
+              <span class="answer-btn">Отправить</span>
+            </section>
+          </div>
+
+          <div id="floating-stop-slot"></div>
+          <div id="popover-slot"></div>
+
+          <div class="pkb-action-bar" id="pkb-action-bar" aria-label="Pikabu floating story bar">
+            <span>▲ 4398 ▼</span>
+            <span>💬 1710</span>
+            <span>↗</span>
+          </div>
+
+          <div class="pkb-floor-ad" id="pkb-floor-ad" hidden>
+            Yandex RTB Floor Ad (z-index: 2147483647)
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <nav class="proto-switcher" aria-label="Переключатель вариантов мобильного UI">
+      <button type="button" id="prev-v" aria-label="Предыдущий вариант">←</button>
+      <span class="proto-switcher-label" id="switcher-label"></span>
+      <button type="button" id="next-v" aria-label="Следующий вариант">→</button>
+    </nav>
+
+    <script>
+      const ICON_SCROLL = `<svg viewBox="0 0 16 16" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 4.25 8 7.75 11.5 4.25M4.5 8.5 8 12 11.5 8.5"/></svg>`;
+      const ICON_GEAR = `<svg viewBox="0 0 16 16" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.7 2.2h2.6l.35 1.55a4.6 4.6 0 0 1 1.15.66l1.52-.48 1.3 2.25-1.18 1.08a4.7 4.7 0 0 1 0 1.48l1.18 1.08-1.3 2.25-1.52-.48a4.6 4.6 0 0 1-1.15.66l-.35 1.55H6.7l-.35-1.55a4.6 4.6 0 0 1-1.15-.66l-1.52.48-1.3-2.25 1.18-1.08a4.7 4.7 0 0 1 0-1.48L2.38 6.18l1.3-2.25 1.52.48a4.6 4.6 0 0 1 1.15-.66L6.7 2.2Z"/><circle cx="8" cy="8" r="1.85"/></svg>`;
+
+      const LABELS = {
+        idle: "Раскрыть все",
+        running: "Остановить",
+        stopped: "Продолжить",
+        error: "Повторить",
+        completed: "",
+      };
+
+      const SR_STATUS = {
+        idle: "",
+        running: "Раскрываем комментарии…",
+        stopped: "Раскрытие остановлено.",
+        error: "Ошибка загрузки комментариев.",
+        completed: "Все комментарии раскрыты.",
+      };
+
+      const COUNTS = {
+        idle: { open: 1, total: 1710 },
+        running: { open: 428, total: 1710 },
+        stopped: { open: 428, total: 1710 },
+        error: { open: 428, total: 1710 },
+        completed: { open: 1713, total: 1713 },
+      };
+
+      const SAMPLE_COMMENTS = [
+        ["iFunnyFace", "5 лет назад", "Как-то был сложный перелёт, 4 пересадки с одним опозданием и последующими разборками. И вот последний перелёт, уже ночной — даже самый уставший человек не против поспать.", true],
+        ["TravelReader", "5 лет назад", "Именно поэтому в ночных рейсах всегда беру место у окна и наушники с активным шумоподавлением. Помогает почти безотказно.", false],
+        ["SkyWatcher", "5 лет назад", "Самое забавное, когда сосед ещё и обижается, что ты не поддержал беседу в три часа ночи.", false],
+        ["NightOwl", "5 лет назад", "Маска для сна + беруши спасают даже от самых общительных попутчиков. Проверено на десятичасовых перелётах.", false],
+        ["AeroFan", "5 лет назад", "Один раз попался такой же собеседник на поезде Москва — Адлер, двое суток подряд рассказывал про дачу.", false],
+        ["QuietSeat", "5 лет назад", "Вежливое «извините, я очень хочу спать» обычно работает с первого раза, но бывают редкие исключения.", false],
+      ];
+
+      document.getElementById("comments-container").innerHTML =
+        SAMPLE_COMMENTS.map(
+          ([author, time, text, hasBranch]) => `
+          <article class="comment-item">
+            <div class="comment-meta">
+              <span class="comment-avatar" aria-hidden="true"></span>
+              <span class="comment-author">${author}</span>
+              <span class="comment-time">${time}</span>
+            </div>
+            <p class="comment-text">${text}</p>
+            ${
+              hasBranch
+                ? `<div class="comment-branch"><span class="branch-plus" aria-hidden="true">+</span><span>раскрыть ветку (463)</span></div>`
+                : ""
+            }
+          </article>`,
+        ).join("") + `<button type="button" class="comment__more">Раскрыть 1704 комментария</button>`;
+
+      const VARIANTS = [
+        {
+          key: "B",
+          name: "Single-Row 56px Strip + Top-Docked Ribbon (Recommended)",
+          rationale:
+            "Refined Variant B (Recommended): Untouched 54px .story-comments__menu + zero-CLS 56px single-row companion strip across all 5 states (36px Pikabu-native painted button with 44px touch target) + full-width top-docked progress ribbon flush under sticky header (100% immune to floor ads & .story-action-bar).",
+        },
+        {
+          key: "A",
+          name: "Single-Row 56px Strip + Top-Right Floating Pill",
+          rationale:
+            "Refined Variant A: Identical zero-CLS 56px single-row companion strip, paired with a compact elevated top-right floating Stop pill below sticky header (clears floor ads & .story-action-bar, takes less horizontal space than the full-width ribbon).",
+        },
+      ];
+
+      const params = new URLSearchParams(location.search);
+      const state = {
+        variant: ["A", "B"].includes(params.get("variant")) ? params.get("variant") : "B",
+        theme: params.get("theme") === "dark" ? "dark" : "light",
+        width: params.get("w") === "412" ? "412" : "390",
+        runState: ["idle", "running", "stopped", "completed", "error"].includes(params.get("st"))
+          ? params.get("st")
+          : "idle",
+        view: ["top", "floating", "bottom"].includes(params.get("view"))
+          ? params.get("view")
+          : "top",
+        popoverPlacement:
+          params.get("pop") === "1" ? (params.get("view") === "bottom" ? "bottom" : "top") : null,
+        floorAd: params.get("ad") === "1",
+        capture: params.get("capture") === "1",
+        autoExpand: false,
+      };
+
+      function syncUrl() {
+        const u = new URL(location.href);
+        u.searchParams.set("variant", state.variant);
+        u.searchParams.set("theme", state.theme);
+        u.searchParams.set("w", state.width);
+        u.searchParams.set("st", state.runState);
+        u.searchParams.set("view", state.view);
+        u.searchParams.set("pop", state.popoverPlacement ? "1" : "0");
+        u.searchParams.set("ad", state.floorAd ? "1" : "0");
+        history.replaceState(null, "", u);
+      }
+
+      function renderStripInner(placement) {
+        const st = state.runState;
+        const c = COUNTS[st];
+        const countText = `${c.open}\u00a0/\u00a0${c.total}`;
+        const countAria = `Открыто комментариев: ${c.open} из ${c.total}`;
+        const isRunning = st === "running";
+        const isErr = st === "error";
+        const isDone = st === "completed";
+        const srRole = isErr ? 'role="alert"' : 'role="status" aria-live="polite" aria-atomic="true"';
+        const popId = `settings-popover-${placement}`;
+        const isExpanded = state.popoverPlacement === placement;
+
+        return `
+          <div class="m-left">
+            ${
+              isDone
+                ? `<span class="m-inline-text">${SR_STATUS.completed}</span>`
+                : `<button type="button" class="m-btn">${
+                    isRunning ? `<span class="m-stop-sq" aria-hidden="true"></span>` : ""
+                  }<span>${LABELS[st]}</span></button>`
+            }
+            ${isErr ? `<span class="m-inline-text" data-error="true">Ошибка</span>` : ""}
+            <span class="m-counter" role="group" aria-label="${countAria}">${countText}</span>
+            ${
+              placement === "top"
+                ? `<span class="sr-only" ${srRole}>${SR_STATUS[st]}</span>`
+                : ""
+            }
+          </div>
+          <div class="m-right">
+            ${
+              placement === "top"
+                ? `<button type="button" class="m-icon-btn" aria-label="Перейти к концу комментариев" title="Перейти к концу комментариев">${ICON_SCROLL}</button>`
+                : ""
+            }
+            <button type="button" class="m-icon-btn" id="gear-${placement}" data-toggle-pop="${placement}" aria-label="Настройки" aria-controls="${popId}" aria-haspopup="dialog" aria-expanded="${isExpanded}">${ICON_GEAR}</button>
+          </div>
+        `;
+      }
+
+      function positionPopover(placement) {
+        const pop = document.getElementById(`settings-popover-${placement}`);
+        const vp = document.getElementById("phone-viewport");
+        const trigger = document.getElementById(`gear-${placement}`);
+        if (!pop || !vp || !trigger) return;
+        const vpRect = vp.getBoundingClientRect();
+        const tRect = trigger.getBoundingClientRect();
+        const popH = pop.offsetHeight || 58;
+        const aboveTop = tRect.top - vpRect.top - popH - 6;
+        const belowTop = tRect.bottom - vpRect.top + 6;
+        const fitsBelow = belowTop + popH <= vpRect.height - 96; // reserve floor-ad clearance
+        const fitsAbove = aboveTop >= 62;
+        const top =
+          placement === "bottom"
+            ? fitsAbove
+              ? aboveTop
+              : Math.min(belowTop, vpRect.height - popH - 12)
+            : fitsBelow
+              ? belowTop
+              : Math.max(62, aboveTop);
+        const rightOffset = Math.max(8, Math.round(vpRect.right - tRect.right));
+        pop.style.top = `${Math.round(top)}px`;
+        pop.style.right = `${rightOffset}px`;
+      }
+
+      function render() {
+        document.body.dataset.capture = state.capture ? "1" : "0";
+        document.documentElement.toggleAttribute("data-theme-dark", state.theme === "dark");
+        const vp = document.getElementById("phone-viewport");
+        vp.dataset.width = state.width;
+
+        const vMeta = VARIANTS.find((v) => v.key === state.variant) || VARIANTS[0];
+        document.getElementById("rationale").textContent = vMeta.rationale;
+        document.getElementById("switcher-label").textContent = `${vMeta.key} (${vMeta.name})`;
+
+        document.getElementById("top-companion-slot").innerHTML = `
+          <div class="m-top-strip" id="mobile-top-strip" data-pikabu-expand-comments="top">
+            ${renderStripInner("top")}
+          </div>
+        `;
+        document.getElementById("bottom-controls-slot").innerHTML = `
+          <div class="m-bottom-footer" id="mobile-bottom-footer" data-pikabu-expand-comments="bottom">
+            ${renderStripInner("bottom")}
+          </div>
+        `;
+
+        const scrollEl = document.getElementById("phone-scroll");
+        if (state.view === "top") {
+          scrollEl.scrollTop = 0;
+        } else if (state.view === "floating") {
+          scrollEl.scrollTop = 260;
+        } else {
+          scrollEl.scrollTop = scrollEl.scrollHeight;
+        }
+
+        const floatingSlot = document.getElementById("floating-stop-slot");
+        const cRun = COUNTS.running;
+        const runCountText = `${cRun.open}\u00a0/\u00a0${cRun.total}`;
+        const runCountAria = `Открыто комментариев: ${cRun.open} из ${cRun.total}`;
+
+        if (state.view === "floating") {
+          if (state.variant === "B") {
+            floatingSlot.innerHTML = `
+              <div class="m-floating-ribbon" id="floating-stop-el" role="region" aria-label="Ход раскрытия комментариев">
+                <div class="m-ribbon-meta">
+                  <span class="m-ribbon-label">Раскрываем…</span>
+                  <span class="m-counter" role="group" aria-label="${runCountAria}">${runCountText}</span>
+                </div>
+                <button type="button" class="m-btn m-floating-btn">
+                  <span class="m-stop-sq" aria-hidden="true"></span>
+                  <span>Остановить</span>
+                </button>
+              </div>
+            `;
+          } else {
+            floatingSlot.innerHTML = `
+              <button type="button" class="m-floating-pill m-floating-btn" id="floating-stop-el">
+                <span class="m-stop-sq" aria-hidden="true"></span>
+                <span>Остановить</span>
+                <span class="sr-only"> (${runCountAria})</span>
+                <span class="m-counter" aria-hidden="true">${runCountText}</span>
+              </button>
+            `;
+          }
+        } else {
+          floatingSlot.innerHTML = "";
+        }
+
+        const popSlot = document.getElementById("popover-slot");
+        if (state.popoverPlacement) {
+          const placement = state.popoverPlacement;
+          popSlot.innerHTML = `
+            <div class="m-popover" id="settings-popover-${placement}" role="dialog" aria-label="Настройки">
+              <label class="m-settings-opt">
+                <input type="checkbox" id="m-auto-cb" name="autoExpandOnVisit" autocomplete="off" ${
+                  state.autoExpand ? "checked" : ""
+                } />
+                <span>Раскрывать комментарии при открытии поста</span>
+              </label>
+            </div>
+          `;
+          document.getElementById("m-auto-cb").addEventListener("change", (e) => {
+            state.autoExpand = e.target.checked;
+          });
+          positionPopover(placement);
+        } else {
+          popSlot.innerHTML = "";
+        }
+
+        document.getElementById("pkb-action-bar").hidden = state.view !== "floating" || state.floorAd;
+        document.getElementById("pkb-floor-ad").hidden = !state.floorAd;
+
+        document.querySelectorAll("[data-toggle-pop]").forEach((btn) =>
+          btn.addEventListener("click", () => {
+            const p = btn.getAttribute("data-toggle-pop");
+            state.popoverPlacement = state.popoverPlacement === p ? null : p;
+            syncUrl();
+            render();
+          }),
+        );
+
+        document.querySelectorAll("[data-theme]").forEach((b) =>
+          b.setAttribute("aria-pressed", String(b.getAttribute("data-theme") === state.theme)),
+        );
+        document.querySelectorAll("[data-w]").forEach((b) =>
+          b.setAttribute("aria-pressed", String(b.getAttribute("data-w") === state.width)),
+        );
+        document.querySelectorAll("[data-st]").forEach((b) =>
+          b.setAttribute("aria-pressed", String(b.getAttribute("data-st") === state.runState)),
+        );
+        document.querySelectorAll("[data-view]").forEach((b) =>
+          b.setAttribute("aria-pressed", String(b.getAttribute("data-view") === state.view)),
+        );
+        document
+          .querySelector("[data-pop]")
+          .setAttribute("aria-pressed", String(Boolean(state.popoverPlacement)));
+        document.querySelector("[data-ad]").setAttribute("aria-pressed", String(state.floorAd));
+      }
+
+      document.querySelectorAll("[data-theme]").forEach((b) =>
+        b.addEventListener("click", () => {
+          state.theme = b.getAttribute("data-theme");
+          syncUrl();
+          render();
+        }),
+      );
+      document.querySelectorAll("[data-w]").forEach((b) =>
+        b.addEventListener("click", () => {
+          state.width = b.getAttribute("data-w");
+          syncUrl();
+          render();
+        }),
+      );
+      document.querySelectorAll("[data-st]").forEach((b) =>
+        b.addEventListener("click", () => {
+          state.runState = b.getAttribute("data-st");
+          syncUrl();
+          render();
+        }),
+      );
+      document.querySelectorAll("[data-view]").forEach((b) =>
+        b.addEventListener("click", () => {
+          state.view = b.getAttribute("data-view");
+          if (state.view === "floating") state.runState = "running";
+          if (state.popoverPlacement) {
+            state.popoverPlacement = state.view === "bottom" ? "bottom" : "top";
+          }
+          syncUrl();
+          render();
+        }),
+      );
+      document.querySelector("[data-pop]").addEventListener("click", () => {
+        const target = state.view === "bottom" ? "bottom" : "top";
+        state.popoverPlacement = state.popoverPlacement ? null : target;
+        syncUrl();
+        render();
+      });
+      document.querySelector("[data-ad]").addEventListener("click", () => {
+        state.floorAd = !state.floorAd;
+        syncUrl();
+        render();
+      });
+
+      function cycle(d) {
+        const i = VARIANTS.findIndex((v) => v.key === state.variant);
+        state.variant = VARIANTS[(i + d + VARIANTS.length) % VARIANTS.length].key;
+        syncUrl();
+        render();
+      }
+      document.getElementById("prev-v").addEventListener("click", () => cycle(-1));
+      document.getElementById("next-v").addEventListener("click", () => cycle(1));
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && state.popoverPlacement) {
+          const returnTo = state.popoverPlacement;
+          state.popoverPlacement = null;
+          syncUrl();
+          render();
+          document.getElementById(`gear-${returnTo}`)?.focus();
+          return;
+        }
+        const tag = document.activeElement?.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA") return;
+        if (e.key === "ArrowLeft") cycle(-1);
+        if (e.key === "ArrowRight") cycle(1);
+      });
+
+      render();
+    </script>
+  </body>
+</html>
