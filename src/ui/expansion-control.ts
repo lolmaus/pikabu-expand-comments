@@ -93,10 +93,18 @@ function createControlStylesheet(placement: "top" | "bottom") {
       ? `
       display: inline-flex;
       flex: 0 0 auto;
+    `
+      : `
+      display: block;
+    `;
+  const barLayout =
+    placement === "top"
+      ? `
+      display: inline-flex;
       align-items: center;
       flex-wrap: nowrap;
       gap: 6px;
-      margin-inline-start: 12px;
+      padding-inline-start: 12px;
       block-size: 32px;
       white-space: nowrap;
     `
@@ -106,7 +114,6 @@ function createControlStylesheet(placement: "top" | "bottom") {
       justify-content: space-between;
       flex-wrap: wrap;
       gap: 8px 12px;
-      margin-block-start: 12px;
       padding-block-start: 12px;
       border-top: 1px solid var(--color-black-430, #ebedf2);
       white-space: normal;
@@ -147,6 +154,15 @@ function createControlStylesheet(placement: "top" | "bottom") {
     }
     :host([hidden]) {
       display: none;
+    }
+    .bar-shell {
+      box-sizing: border-box;
+      ${placement === "bottom" ? "padding-block-start: var(--s-gap-blocks, 16px);" : ""}
+    }
+    .bar {
+      box-sizing: border-box;
+      min-inline-size: 0;
+      ${barLayout}
     }
     :host([data-state="completed"]) .status-text {
       max-inline-size: 240px;
@@ -361,9 +377,11 @@ function createControlStylesheet(placement: "top" | "bottom") {
     @media (pointer: coarse), (max-width: 480px) {
       :host {
         flex: 1 1 auto;
+      }
+      .bar {
         flex-wrap: wrap;
         block-size: auto;
-        margin-inline-start: 0.5rem;
+        ${placement === "top" ? "padding-inline-start: 0.5rem;" : ""}
         white-space: normal;
       }
       .icon-button[data-role="settings"] {
@@ -567,6 +585,8 @@ export function mountExpansionControl(
     }
 
     if (placement === "top") {
+      const bar = document.createElement("div");
+      bar.className = "bar";
       const elements: HTMLElement[] = [status, counter, button];
       if (actions.scrollToBottom) {
         const scrollButton = document.createElement("button");
@@ -579,16 +599,23 @@ export function mountExpansionControl(
         scrollButton.addEventListener("click", () => actions.scrollToBottom?.());
         elements.push(scrollButton);
       }
-      elements.push(settings, popover);
-      shadow.append(...elements);
+      elements.push(settings);
+      bar.append(...elements);
+      shadow.append(bar, popover);
     } else {
+      const shell = document.createElement("div");
+      shell.className = "bar-shell";
+      const bar = document.createElement("div");
+      bar.className = "bar";
       const primaryGroup = document.createElement("div");
       primaryGroup.className = "group";
       primaryGroup.append(button, status);
       const metaGroup = document.createElement("div");
       metaGroup.className = "group";
       metaGroup.append(counter, settings);
-      shadow.append(primaryGroup, metaGroup, popover);
+      bar.append(primaryGroup, metaGroup);
+      shell.append(bar);
+      shadow.append(shell, popover);
     }
 
     return { host, shadow, button, counter, settings, popover, checkbox, status };

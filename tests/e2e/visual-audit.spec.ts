@@ -39,6 +39,23 @@ test("passes all P0 visual, geometry, token, axe-core, and Shadow DOM contrast g
       );
       tokensByTheme[theme] = idle.tokens;
 
+      // Bottom controls must stay clearly separated below Pikabu's `.comment__more` button
+      // even when outer host CSS resets `div, span { margin: 0; padding: 0; }`.
+      const bottomGap = await page.evaluate(() => {
+        const more = document.querySelector<HTMLElement>(".comment__more");
+        const bottomAction = document
+          .querySelector<HTMLElement>('[data-pikabu-expand-comments="bottom"]')
+          ?.shadowRoot?.querySelector<HTMLElement>("button.action-button");
+        if (!more || !bottomAction) return null;
+        return Math.round(
+          bottomAction.getBoundingClientRect().top - more.getBoundingClientRect().bottom,
+        );
+      });
+      expect(
+        bottomGap,
+        `Bottom controls gap below .comment__more (${theme} ${viewport.name})`,
+      ).toBeGreaterThanOrEqual(24);
+
       const settingsButton = menu.getByRole("button", { name: "Настройки" });
       await settingsButton.click();
       await expect(

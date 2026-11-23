@@ -105,6 +105,13 @@
   box-sizing: border-box;
 }
 
+/* Match Pikabu's global element reset, which overrides Shadow DOM :host margin/padding. */
+div,
+span {
+  margin: 0;
+  padding: 0;
+}
+
 body {
   margin: 0;
   background: var(--color-black-300);
