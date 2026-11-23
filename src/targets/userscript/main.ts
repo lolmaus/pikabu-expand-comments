@@ -1,6 +1,8 @@
 import {
   findScrollToBottomTarget,
+  measureStickyTopInset,
   mountBottomHost,
+  mountTopHost,
   observeCommentView,
 } from "../../adapters/pikabu/comment-view.ts";
 import { createPostPageAdapter } from "../../adapters/pikabu/post-page.ts";
@@ -76,6 +78,11 @@ function watchPostPage(page: Window) {
       (host) => {
         bottomHost = host;
         mountBottomHost(view, host);
+      },
+      {
+        layout: view.layout,
+        mountTopHost: (host) => mountTopHost(view, host),
+        getTopInset: () => measureStickyTopInset(page.document, page),
       },
     );
     const run = createExpansionRun(

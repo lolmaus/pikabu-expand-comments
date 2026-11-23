@@ -974,3 +974,95 @@ test("locks scroll onto the bottom controls when started from the bottom and unl
     lockedTop + 500,
   );
 });
+
+test("mounts a mobile companion strip on html.mv, docks the ribbon below header.header, and preserves scroll below the sticky header", async ({
+  browser,
+}) => {
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    hasTouch: true,
+    isMobile: true,
+  });
+  const page = await context.newPage();
+  const mobileHtml = expandedHtml
+    .replace("<html", '<html class="mv"')
+    .replace(
+      "</head>",
+      `<meta name="viewport" content="width=device-width, initial-scale=1" />
+      <style>
+        body { margin: 0; }
+        header.header { position: sticky; top: 0; height: 56px; z-index: 5001; background: #fff; }
+        .story-comments__menu { display: flex; align-items: center; height: 54px; padding: 0 16px; }
+      </style></head>`,
+    )
+    .replace("<body>", '<body><header class="header">Пикабу</header>');
+  await page.route("**/*", (route) => route.abort());
+  await page.route(
+    (url) => url.origin + url.pathname === postUrl,
+    (route) => route.fulfill({ contentType: "text/html; charset=utf-8", body: mobileHtml }),
+  );
+  await installUserscript(page);
+  await page.goto(postUrl);
+
+  const container = page.locator(".comments__container");
+  await container.evaluate((element) => {
+    const comment = element.querySelector(".comment")!;
+    comment.insertAdjacentHTML("beforebegin", '<div style="height: 1200px"></div>');
+    comment.insertAdjacentHTML("afterend", '<div style="height: 1800px"></div>');
+    element.insertAdjacentHTML("beforeend", '<button class="comment__more">Загрузить ещё</button>');
+    const batch = element.querySelector(".comment__more")!;
+    batch.addEventListener(
+      "click",
+      () => {
+        comment.insertAdjacentHTML(
+          "beforebegin",
+          '<div class="comment comment_placeholder"><svg width="100" height="24"></svg></div>',
+        );
+      },
+      { once: true },
+    );
+  });
+
+  const top = page.locator('[data-pikabu-expand-comments="top"]');
+  await expect(top).toBeVisible();
+  expect(
+    await top.evaluate((host) => ({
+      parentTag: host.parentElement?.tagName.toLowerCase(),
+      previousIsMenu: host.previousElementSibling?.classList.contains("story-comments__menu"),
+    })),
+  ).toEqual({
+    parentTag: "body",
+    previousIsMenu: true,
+  });
+
+  const start = top.getByRole("button", { name: "Раскрыть все" });
+  await expect(start).toBeVisible();
+  const linkedComment = container.locator("#comment_1");
+  await linkedComment.evaluate((element) => {
+    window.scrollBy(0, element.getBoundingClientRect().top - 100);
+  });
+  const originalTop = await linkedComment.evaluate((el) => el.getBoundingClientRect().top);
+
+  await start.evaluate((button) => (button as HTMLButtonElement).click());
+  await expect(container.locator(".comment_placeholder")).toHaveCount(1);
+
+  const ribbon = top.locator('[data-role="floating-ribbon"]');
+  await expect(ribbon).toBeVisible();
+  expect(await ribbon.evaluate((el) => Math.round(el.getBoundingClientRect().top))).toBe(56);
+
+  await container.evaluate((element) => {
+    const placeholder = element.querySelector<HTMLElement>(".comment_placeholder")!;
+    placeholder.style.height = "160px";
+    placeholder.classList.remove("comment_placeholder");
+    placeholder.textContent = "Новый комментарий";
+    element.querySelector(".comment__more")!.remove();
+  });
+
+  await expect(top.getByRole("status")).toHaveText("Все комментарии раскрыты.");
+  expect(await linkedComment.evaluate((el) => el.getBoundingClientRect().top)).toBeCloseTo(
+    originalTop,
+    0,
+  );
+  await expect(ribbon).toBeHidden();
+  await context.close();
+});

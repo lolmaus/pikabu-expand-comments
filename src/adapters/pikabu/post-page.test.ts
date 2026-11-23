@@ -308,3 +308,128 @@ test("falls back to .story__comments-link-count when article.story[data-comments
   const container = document.querySelector<HTMLElement>(".comments__container")!;
   expect(createPostPageAdapter(container, "all").read().totalCommentsCount).toBe(42);
 });
+
+test("hydrates mobile Reply Branches with .comment_placeholder SVG skeletons and ignores hidden SSR comments", async () => {
+  document.documentElement.classList.add("mv");
+  document.body.innerHTML = `
+    <article class="story" data-comments="1710"></article>
+    <div class="story-comments__all">
+      <section class="comments">
+        <div class="comments__container">
+          <div class="comment" id="comment_1" data-id="1" data-indent="0">
+            <div class="comment__body">Первый мобильный комментарий</div>
+            <div class="comment-toggle-children ${collapseClass}">раскрыть ветку (2)</div>
+            <div class="comment__children" hidden></div>
+          </div>
+          <div class="comment" id="comment_2" data-id="2" hidden><div class="comment__body">SSR 2</div></div>
+          <div class="comment" id="comment_3" data-id="3" hidden><div class="comment__body">SSR 3</div></div>
+          <div class="comment" id="comment_4" data-id="4" hidden><div class="comment__body">SSR 4</div></div>
+          <div class="comment" id="comment_5" data-id="5" hidden><div class="comment__body">SSR 5</div></div>
+          <button type="button" class="comment__more">Раскрыть <span class="comments__more-count">1709 комментариев</span></button>
+        </div>
+      </section>
+    </div>
+  `;
+  try {
+    const container = document.querySelector<HTMLElement>(".comments__container")!;
+    const branch = container.querySelector<HTMLElement>(".comment-toggle-children")!;
+    const children = branch.nextElementSibling as HTMLElement;
+    const skeleton = document.createElement("div");
+    skeleton.className = "comment comment_placeholder";
+    skeleton.dataset["id"] = "101";
+    skeleton.dataset["indent"] = "6";
+    skeleton.innerHTML =
+      '<div class="comment__placeholder"><svg width="400" height="100"></svg></div>';
+
+    branch.addEventListener("click", () => {
+      branch.classList.remove(collapseClass);
+      children.hidden = false;
+      children.append(skeleton);
+    });
+
+    const postPage = createPostPageAdapter(container, "all");
+    expect(postPage.read().loadedCommentsCount).toBe(1);
+    expect(postPage.read().totalCommentsCount).toBe(1710);
+
+    const onSettled = vi.fn();
+    const expanding = postPage.expand(branch).then(onSettled);
+    expect(postPage.read().isHydrating).toBe(true);
+    await Promise.resolve();
+    expect(onSettled).not.toHaveBeenCalled();
+
+    // Hydrate the mobile SVG skeleton into a real comment with a next-floor branch at data-indent="6".
+    skeleton.classList.remove("comment_placeholder");
+    skeleton.innerHTML = `<div class="comment__body">Ответ 6 уровня</div>
+      <div class="comment-toggle-children comment-toggle-children_next-floor ${collapseClass}">раскрыть ветку (5)</div>
+      <div class="comment__children comment__children_next-floor" hidden></div>`;
+    await expanding;
+
+    expect(onSettled).toHaveBeenCalledWith("expanded");
+    const after = postPage.read();
+    expect(after.isHydrating).toBe(false);
+    expect(after.loadedCommentsCount).toBe(2);
+    expect(after.loaders[0]?.classList.contains("comment-toggle-children_next-floor")).toBe(true);
+  } finally {
+    document.documentElement.classList.remove("mv");
+  }
+});
+
+test("anchors scroll preservation below a sticky mobile top header instead of y = 0", async () => {
+  document.documentElement.classList.add("mv");
+  document.body.innerHTML = `
+    <header class="header" style="position: sticky; top: 0"></header>
+    <div class="story-comments__all">
+      <section class="comments">
+        <div class="comments__container">
+          <div class="comment" id="behind_header" data-id="1">Скрыт под шапкой</div>
+          <div class="comment" id="visible_below_header" data-id="2">Виден под шапкой</div>
+          <button type="button" class="comment__more">Раскрыть</button>
+        </div>
+      </section>
+    </div>
+  `;
+  const originalElementsFromPoint = document.elementsFromPoint;
+  const originalScrollBy = window.scrollBy;
+  try {
+    const header = document.querySelector<HTMLElement>("header.header")!;
+    const container = document.querySelector<HTMLElement>(".comments__container")!;
+    const behind = document.querySelector<HTMLElement>("#behind_header")!;
+    const visible = document.querySelector<HTMLElement>("#visible_below_header")!;
+    const batch = document.querySelector<HTMLElement>(".comment__more")!;
+
+    vi.spyOn(header, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 390, 56));
+    vi.spyOn(container, "getBoundingClientRect").mockReturnValue(new DOMRect(0, -40, 390, 800));
+    vi.spyOn(behind, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 4, 390, 48));
+    let visibleTop = 64;
+    vi.spyOn(visible, "getBoundingClientRect").mockImplementation(
+      () => new DOMRect(0, visibleTop, 390, 80),
+    );
+    vi.spyOn(visible, "getClientRects").mockReturnValue([new DOMRect(0, 64, 390, 80)] as never);
+
+    const probedY: number[] = [];
+    document.elementsFromPoint = (_x: number, y: number) => {
+      probedY.push(y);
+      return y >= 56 ? [visible] : [behind];
+    };
+    const scrollBySpy = vi.fn();
+    window.scrollBy = scrollBySpy;
+
+    batch.addEventListener("click", () => {
+      visibleTop = 184;
+      batch.insertAdjacentHTML("beforebegin", '<div class="comment">Новый</div>');
+      batch.remove();
+    });
+
+    const postPage = createPostPageAdapter(container, "all");
+    postPage.setRunning(true);
+    await postPage.expand(batch);
+
+    expect(probedY[0]).toBe(60);
+    expect(scrollBySpy).toHaveBeenCalledWith({ top: 120, behavior: "instant" });
+    postPage.setRunning(false);
+  } finally {
+    document.elementsFromPoint = originalElementsFromPoint;
+    window.scrollBy = originalScrollBy;
+    document.documentElement.classList.remove("mv");
+  }
+});

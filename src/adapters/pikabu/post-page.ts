@@ -1,5 +1,5 @@
 import type { PostPageAdapter } from "../../core/expansion-run.ts";
-import type { CommentTabKind } from "./comment-view.ts";
+import { measureStickyTopInset, type CommentTabKind } from "./comment-view.ts";
 import { createScrollPreservation } from "./scroll-preservation.ts";
 
 const replyBranch = ".comment-toggle-children";
@@ -57,7 +57,10 @@ export function createPostPageAdapter(
     return currentContainers().some((container) => container.contains(node));
   }
 
-  const scroll = createScrollPreservation(initialContainer.ownerDocument, currentContainer);
+  const ownerDocument = initialContainer.ownerDocument;
+  const scroll = createScrollPreservation(ownerDocument, currentContainer, () =>
+    ownerDocument.defaultView ? measureStickyTopInset(ownerDocument, ownerDocument.defaultView) : 0,
+  );
 
   function visibleElements(selector: string) {
     return currentContainers().flatMap((container) =>

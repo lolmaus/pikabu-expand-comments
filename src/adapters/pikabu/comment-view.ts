@@ -1,9 +1,40 @@
 export type CommentTabKind = "all" | "author";
+export type PostPageLayout = "desktop" | "mobile";
 
 export interface CommentView {
   menu: HTMLElement;
   container: HTMLElement;
   tabKind: CommentTabKind;
+  layout: PostPageLayout;
+}
+
+const stickyTopChromeSelector = "header.header, .promo-banner, .header-tab-list";
+
+export function detectPostPageLayout(document: Document): PostPageLayout {
+  return document.documentElement.classList.contains("mv") ? "mobile" : "desktop";
+}
+
+export function mountTopHost(view: Pick<CommentView, "menu" | "layout">, host: HTMLElement) {
+  if (view.layout === "mobile") {
+    view.menu.after(host);
+    return;
+  }
+  view.menu.append(host);
+}
+
+export function measureStickyTopInset(document: Document, page: Window): number {
+  const maxChromeHeight = page.innerHeight > 0 ? page.innerHeight * 0.5 : 240;
+  let inset = 0;
+  for (const element of document.querySelectorAll<HTMLElement>(stickyTopChromeSelector)) {
+    if (isHiddenElement(element, page)) continue;
+    const position = page.getComputedStyle(element).position;
+    if (position !== "sticky" && position !== "fixed") continue;
+    const rect = element.getBoundingClientRect();
+    if (rect.height <= 0 || rect.bottom <= 0 || rect.bottom > maxChromeHeight) continue;
+    if (rect.top > maxChromeHeight) continue;
+    inset = Math.max(inset, Math.ceil(rect.bottom));
+  }
+  return inset;
 }
 
 function isHiddenElement(element: HTMLElement, page: Window) {
@@ -123,10 +154,12 @@ export function observeCommentView(page: Window, onChange: (view?: CommentView) 
       selected?.getAttribute("data-id") ?? tabRoute ?? selected?.getAttribute("href") ?? null;
     const path = location.pathname;
     const tabKind = detectTabKind(selected, path);
+    const layout = detectPostPageLayout(document);
     const container = findActiveContainer(document, page, tabKind);
     const navigated = previous && previous.path !== path && previous.tabRoute !== path;
     const sameTab = previous?.tab === tab;
     const sameContainer = !containerWasMissing && previous?.container === container;
+    const sameLayout = previous?.layout === layout;
     const spinner = menu.querySelector<HTMLElement>(".menu__spinner");
     const loading =
       spinner &&
@@ -136,7 +169,7 @@ export function observeCommentView(page: Window, onChange: (view?: CommentView) 
 
     if (!container) {
       containerWasMissing = true;
-      if (loading || navigated || !sameTab || previous?.menu !== menu) unmount();
+      if (loading || navigated || !sameTab || !sameLayout || previous?.menu !== menu) unmount();
       return;
     }
     containerWasMissing = false;
@@ -148,6 +181,7 @@ export function observeCommentView(page: Window, onChange: (view?: CommentView) 
       !navigated &&
       sameTab &&
       sameContainer &&
+      sameLayout &&
       previous.menu === menu
     ) {
       previous.path = path;
@@ -165,7 +199,7 @@ export function observeCommentView(page: Window, onChange: (view?: CommentView) 
     unmount();
     if (loading || (navigated && sameTab && sameContainer && !contentsReplaced)) return;
 
-    previous = { menu, container, tabKind, path, tab, tabRoute };
+    previous = { menu, container, tabKind, layout, path, tab, tabRoute };
     contentsReplaced = false;
     mounted = true;
     onChange(previous);

@@ -5,7 +5,7 @@ A tool that automatically expands all unloaded comments on Pikabu.ru post pages 
 ## Language
 
 **Post Page**:
-A desktop Pikabu.ru story page hosting a post and its comment tree.
+A desktop or mobile Pikabu.ru story page hosting a post and its comment tree.
 _Avoid_: Story page, article, thread page
 
 **Comment Batch**:
