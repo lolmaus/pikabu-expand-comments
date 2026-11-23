@@ -5,6 +5,7 @@
   },
   "include": [
     "playwright*.config.mts",
+    "scripts/**/*.mts",
     "tests/e2e/**/*.ts",
     "tests/live/**/*.ts",
     "tests/visual/**/*.ts",

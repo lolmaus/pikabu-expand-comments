@@ -24,6 +24,7 @@ export interface MountExpansionControlOptions {
   layout?: PostPageLayout;
   mountTopHost?: (host: HTMLElement) => void;
   getTopInset?: () => number;
+  subscribeAutoExpandOnVisit?: (onChange: (enabled: boolean) => void) => () => void;
 }
 
 interface ControlInstance {
@@ -1136,9 +1137,17 @@ export function mountExpansionControl(
     }
   });
 
+  const unsubscribePreference = options?.subscribeAutoExpandOnVisit?.((enabled) => {
+    for (const box of checkboxes) {
+      box.checked = enabled;
+      box.disabled = false;
+    }
+  });
+
   signal?.addEventListener(
     "abort",
     () => {
+      unsubscribePreference?.();
       viewportEvents?.abort();
       for (const instance of instances) instance.closePopover(true);
       top.host.remove();

@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#fcfdff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#292a2e" media="(prefers-color-scheme: dark)" />
+    <title>Pikabu Expand Comments</title>
+    <link rel="stylesheet" href="./popup.css" />
+  </head>
+  <body>
+    <main class="popup-root">
+      <header class="popup-header">
+        <svg
+          class="popup-brand-icon"
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 16 16"
+          width="24"
+          height="24"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <path
+            d="M2.5 1.25h11a2 2 0 0 1 2 2V10a2 2 0 0 1-2 2H7l-2.6 2.4a.7.7 0 0 1-1.15-.52V12H2.5a2 2 0 0 1-2-2V3.25a2 2 0 0 1 2-2z"
+            fill="#4f8c2b"
+          />
+          <path
+            d="M5 4.0 8 6.3 11 4.0M5 7.0 8 9.3 11 7.0"
+            fill="none"
+            stroke="#ffffff"
+            stroke-width="1.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+        </svg>
+        <h1 class="popup-title" translate="no">Pikabu Expand Comments</h1>
+        <span class="popup-version" id="popup-version"></span>
+      </header>
+
+      <section class="popup-action-box" id="active-card" hidden>
+        <div class="popup-action-meta">
+          <span class="popup-status" id="popup-status" aria-live="polite"></span>
+          <span class="count-pill" id="popup-counter" role="group"></span>
+        </div>
+        <button type="button" class="popup-primary-btn" id="popup-action-btn" data-running="false">
+          <span class="stop-square" id="popup-stop-square" aria-hidden="true" hidden></span>
+          <span id="popup-action-label"></span>
+        </button>
+      </section>
+
+      <section class="popup-action-box" id="offsite-card">
+        <p class="popup-hint" id="popup-offsite-hint"></p>
+        <a
+          class="popup-link"
+          id="popup-open-pikabu"
+          href="https://pikabu.ru/"
+          target="_blank"
+          rel="noopener noreferrer"
+        ></a>
+      </section>
+
+      <hr class="popup-divider" />
+
+      <label class="switch-row" for="auto-expand-switch">
+        <span class="switch-copy">
+          <span class="switch-title" id="popup-auto-title"></span>
+          <span class="switch-desc" id="popup-auto-desc"></span>
+        </span>
+        <span class="switch-control">
+          <input type="checkbox" role="switch" id="auto-expand-switch" />
+          <span class="switch-track" aria-hidden="true"></span>
+        </span>
+      </label>
+    </main>
+    <script type="module" src="./popup.ts"></script>
+  </body>
+</html>

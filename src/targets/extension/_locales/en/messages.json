@@ -1,0 +1,86 @@
+{
+  "extensionName": {
+    "message": "Pikabu Expand Comments",
+    "description": "Extension title shown in Chrome Web Store, Firefox Add-ons, and browser toolbar."
+  },
+  "extensionDescription": {
+    "message": "Expand all comments and nested reply branches on Pikabu.ru post pages with one click or automatically on visit.",
+    "description": "Short extension description for browser extension stores."
+  },
+  "actionTitle": {
+    "message": "Pikabu Expand Comments",
+    "description": "Toolbar button tooltip."
+  },
+  "popupExpandAll": {
+    "message": "Expand all comments"
+  },
+  "popupStop": {
+    "message": "Stop"
+  },
+  "popupContinue": {
+    "message": "Continue"
+  },
+  "popupRetry": {
+    "message": "Retry"
+  },
+  "popupStatusIdle": {
+    "message": "Comments on this post"
+  },
+  "popupStatusRunning": {
+    "message": "Expanding comments…"
+  },
+  "popupStatusStopped": {
+    "message": "Expansion stopped."
+  },
+  "popupStatusError": {
+    "message": "Failed to load comments."
+  },
+  "popupStatusCompletedAll": {
+    "message": "All comments expanded."
+  },
+  "popupStatusAlreadyExpanded": {
+    "message": "All comments are already expanded."
+  },
+  "popupStatusSkippedOne": {
+    "message": "One branch could not be expanded."
+  },
+  "popupStatusSkippedMany": {
+    "message": "$COUNT$ branches could not be expanded.",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "popupOffSiteHint": {
+    "message": "Works on Pikabu.ru post pages (pikabu.ru/story/…)."
+  },
+  "popupOpenPikabu": {
+    "message": "Open Pikabu"
+  },
+  "popupAutoExpandTitle": {
+    "message": "Auto-expand on visit"
+  },
+  "popupAutoExpandDesc": {
+    "message": "Starts expanding comments when opening a post"
+  },
+  "popupCounterAriaLabel": {
+    "message": "Open comments: $OPEN$ of $TOTAL$",
+    "placeholders": {
+      "open": {
+        "content": "$1"
+      },
+      "total": {
+        "content": "$2"
+      }
+    }
+  },
+  "popupCounterOpenOnlyAriaLabel": {
+    "message": "Open comments: $OPEN$",
+    "placeholders": {
+      "open": {
+        "content": "$1"
+      }
+    }
+  }
+}

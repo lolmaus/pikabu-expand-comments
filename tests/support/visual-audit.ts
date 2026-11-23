@@ -479,11 +479,20 @@ export async function auditPikabuTokens(page: Page): Promise<TokenAuditReport> {
   }, CORE_PIKABU_TOKENS);
 }
 
-export async function auditAxe(page: Page): Promise<AxeAuditReport> {
-  const hasHosts = (await page.locator("[data-pikabu-expand-comments]").count()) > 0;
+export async function auditAxe(
+  page: Page,
+  includeSelector?: string | null,
+): Promise<AxeAuditReport> {
   let builder = new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]);
-  if (hasHosts) {
-    builder = builder.include("[data-pikabu-expand-comments]");
+  if (includeSelector !== undefined) {
+    if (includeSelector !== null) {
+      builder = builder.include(includeSelector);
+    }
+  } else {
+    const hasHosts = (await page.locator("[data-pikabu-expand-comments]").count()) > 0;
+    if (hasHosts) {
+      builder = builder.include("[data-pikabu-expand-comments]");
+    }
   }
   const result = await builder.analyze();
   const mapItems = (items: typeof result.violations): AxeFinding[] =>
@@ -1005,6 +1014,227 @@ export function evaluateMobileP0Gates(
     }
   }
   return failures;
+}
+
+export interface PopupAuditReport {
+  state: string;
+  theme: VisualTheme;
+  width: number;
+  height: number;
+  overflowX: number;
+  bodyBackground: string;
+  bodyColor: string;
+  minTouchTarget: number | null;
+  axe: AxeAuditReport;
+  contrast: ContrastAuditReport;
+  p0: { passed: boolean; failures: P0Failure[] };
+}
+
+export async function auditLightDomContrast(
+  page: Page,
+  fallbackRootBg: string,
+): Promise<ContrastAuditReport> {
+  const rawSamples = await page.evaluate((rootBg) => {
+    type RawSample = {
+      hostPlacement: string;
+      selector: string;
+      kind: "text" | "ui-boundary" | "focus-outline";
+      text: string;
+      fg: string;
+      bgChain: string[];
+      minRequired: number;
+    };
+
+    const collectBgChain = (start: Element | null): string[] => {
+      const chain: string[] = [];
+      let node: Element | null = start;
+      while (node) {
+        const bg = getComputedStyle(node).backgroundColor;
+        if (bg && bg !== "rgba(0, 0, 0, 0)" && bg !== "transparent") {
+          chain.push(bg);
+        }
+        node = node.parentElement;
+      }
+      chain.push(rootBg);
+      return chain;
+    };
+
+    const isVisible = (el: Element): boolean => {
+      if (el instanceof HTMLElement && el.hidden) return false;
+      const cs = getComputedStyle(el);
+      if (
+        cs.display === "none" ||
+        cs.visibility === "hidden" ||
+        Number.parseFloat(cs.opacity) === 0
+      ) {
+        return false;
+      }
+      const r = el.getBoundingClientRect();
+      return r.width > 0 && r.height > 0;
+    };
+
+    const samples: RawSample[] = [];
+    for (const el of document.body.querySelectorAll("*")) {
+      if (!isVisible(el)) continue;
+      const cs = getComputedStyle(el);
+      const directText = Array.from(el.childNodes)
+        .filter((n) => n.nodeType === Node.TEXT_NODE)
+        .map((n) => n.textContent ?? "")
+        .join(" ")
+        .trim();
+
+      if (directText.length > 0) {
+        const fontSize = Number.parseFloat(cs.fontSize) || 14;
+        const fontWeight = Number.parseInt(cs.fontWeight, 10) || 400;
+        const isLarge = fontSize >= 24 || (fontSize >= 18.66 && fontWeight >= 700);
+        samples.push({
+          hostPlacement: "popup",
+          selector: `${el.tagName.toLowerCase()}${el.id ? `#${el.id}` : ""}`,
+          kind: "text",
+          text: directText.slice(0, 48),
+          fg: cs.color,
+          bgChain: collectBgChain(el),
+          minRequired: isLarge ? 3.0 : 4.5,
+        });
+      }
+
+      if (el.classList.contains("switch-track")) {
+        samples.push({
+          hostPlacement: "popup",
+          selector: ".switch-track",
+          kind: "ui-boundary",
+          text: "switch-track",
+          fg: cs.backgroundColor,
+          bgChain: collectBgChain(el.parentElement),
+          minRequired: 3.0,
+        });
+        const thumbBg = getComputedStyle(el, "::after").backgroundColor;
+        if (thumbBg && thumbBg !== "rgba(0, 0, 0, 0)" && thumbBg !== "transparent") {
+          samples.push({
+            hostPlacement: "popup",
+            selector: ".switch-track::after",
+            kind: "ui-boundary",
+            text: "switch-thumb",
+            fg: thumbBg,
+            bgChain: collectBgChain(el),
+            minRequired: 3.0,
+          });
+        }
+      }
+    }
+    return samples;
+  }, fallbackRootBg);
+
+  const resolveChain = (chain: string[]): RgbaColor => {
+    let acc: RgbaColor = { r: 255, g: 255, b: 255, a: 1 };
+    for (let i = chain.length - 1; i >= 0; i -= 1) {
+      const parsed = parseCssColor(chain[i]!);
+      if (parsed) acc = compositeOver(parsed, acc);
+    }
+    return acc;
+  };
+
+  const samples: ContrastSample[] = [];
+  for (const raw of rawSamples) {
+    const fgParsed = parseCssColor(raw.fg);
+    if (!fgParsed) continue;
+    const bg = resolveChain(raw.bgChain);
+    const fg = compositeOver(fgParsed, bg);
+    const ratio = contrastRatio(fg, bg);
+    samples.push({
+      hostPlacement: raw.hostPlacement,
+      selector: raw.selector,
+      kind: raw.kind,
+      text: raw.text,
+      foreground: raw.fg,
+      background: `rgb(${Math.round(bg.r)}, ${Math.round(bg.g)}, ${Math.round(bg.b)})`,
+      ratio,
+      minRequired: raw.minRequired,
+      passed: ratio >= raw.minRequired,
+    });
+  }
+
+  return {
+    samples,
+    failures: samples.filter((sample) => !sample.passed),
+  };
+}
+
+export async function auditPopupState(
+  page: Page,
+  options: { state: string; theme: VisualTheme; isMobile: boolean },
+): Promise<PopupAuditReport> {
+  const fallbackRootBg = options.theme === "dark" ? "rgb(41, 42, 46)" : "rgb(252, 253, 255)";
+  const axe = await auditAxe(page, null);
+  const contrast = await auditLightDomContrast(page, fallbackRootBg);
+  const layout = await page.evaluate(() => {
+    const cs = getComputedStyle(document.body);
+    const root = document.querySelector<HTMLElement>(".popup-root") ?? document.body;
+    const rect = root.getBoundingClientRect();
+    const touchDims: number[] = [];
+    for (const el of document.querySelectorAll<HTMLElement>("button, a, label.switch-row")) {
+      if (el.hidden || el.closest("[hidden]")) continue;
+      const r = el.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0) {
+        touchDims.push(Math.min(Math.round(r.width), Math.round(r.height)));
+      }
+    }
+    return {
+      width: Math.round(rect.width),
+      height: Math.round(rect.height),
+      overflowX: Math.max(0, document.documentElement.scrollWidth - window.innerWidth),
+      bodyBackground: cs.backgroundColor,
+      bodyColor: cs.color,
+      minTouchTarget: touchDims.length > 0 ? Math.min(...touchDims) : null,
+    };
+  });
+
+  const failures: P0Failure[] = [];
+  if (layout.overflowX > 0) {
+    failures.push({
+      gate: "overflow",
+      message: `Popup overflows horizontally by ${layout.overflowX}px`,
+    });
+  }
+  if (layout.height > 600) {
+    failures.push({
+      gate: "geometry",
+      message: `Popup height ${layout.height}px exceeds Chrome 600px ceiling`,
+    });
+  }
+  if (options.isMobile && layout.minTouchTarget !== null && layout.minTouchTarget < 44) {
+    failures.push({
+      gate: "geometry",
+      message: `Mobile popup minTouchTarget=${layout.minTouchTarget}px (expected >= 44px)`,
+    });
+  }
+  if (axe.violations.length > 0) {
+    const ids = axe.violations.map((v) => `${v.id}(${v.nodeCount})`).join(", ");
+    failures.push({
+      gate: "axe",
+      message: `Popup axe-core violations: ${ids}`,
+    });
+  }
+  for (const failure of contrast.failures) {
+    failures.push({
+      gate: "contrast",
+      message: `popup ${failure.selector} (${failure.kind} "${failure.text}") contrast ${failure.ratio}:1 < ${failure.minRequired}:1 (${failure.foreground} on ${failure.background})`,
+    });
+  }
+
+  return {
+    state: options.state,
+    theme: options.theme,
+    width: layout.width,
+    height: layout.height,
+    overflowX: layout.overflowX,
+    bodyBackground: layout.bodyBackground,
+    bodyColor: layout.bodyColor,
+    minTouchTarget: layout.minTouchTarget,
+    axe,
+    contrast,
+    p0: { passed: failures.length === 0, failures },
+  };
 }
 
 export function assertLightDarkTokenParity(
